@@ -1,5 +1,7 @@
-work in progress
-Decentralized Finance: A Market Mechanism for Cybersecurity Risk Insurance
+## work in progress## 
+
+
+#Decentralized Finance: A Market Mechanism for Cybersecurity Risk Insurance#
 
 This repository contains the complete implementation and replication code for the academic paper "Decentralized Finance: A Market Mechanism for Cybersecurity Risk Insurance" by Björn Hanneke (Goethe University Frankfurt).
 📄 Paper Abstract
