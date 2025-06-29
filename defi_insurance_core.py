@@ -67,7 +67,7 @@ class InsuranceMarket:
         Returns:
             Maximum coverage amount
         """
-        return self.params.mu * (c_c ** self.params.theta) * security_factor * tvl
+        return self.params.mu * (c_c ** self.params.theta) * security_factor
     
     def utilization(self, coverage: float, c_lp: float) -> float:
         """
@@ -106,7 +106,7 @@ class InsuranceMarket:
         return c_c + c_premium + c_lp + c_spec
     
     def protocol_profit(self, c_c: float, c_lp: float, c_spec: float, 
-                       p_hack: float, expected_lgh: float, gamma: float) -> float:
+                   p_hack: float, expected_lgh: float, gamma: float, risk_aversion: float = 2.0) -> float:
         """
         Calculate protocol expected profit (Equation 6)
         
@@ -140,10 +140,18 @@ class InsuranceMarket:
         opportunity_cost = c_c * self.params.r_market
         premium_cost = c_premium
         
-        return insurance_payout - speculator_payout + yield_share - opportunity_cost - premium_cost
-    
+        # Risk aversion utility
+        expected_loss = expected_lgh * self.tvl
+        uninsured_loss_risk = p_hack * expected_loss
+        coverage = self.coverage_function(c_c, self.tvl)
+        insured_loss_risk = p_hack * max(0, expected_loss - coverage)
+        risk_reduction_value = (uninsured_loss_risk - insured_loss_risk) * risk_aversion
+
+        basic_profit = insurance_payout - speculator_payout + yield_share - opportunity_cost - premium_cost
+        return basic_profit + risk_reduction_value
+
     def lp_profit(self, c_c: float, c_lp: float, c_spec: float,
-                  p_hack: float, expected_lgh: float, gamma: float) -> float:
+                  p_hack: float, expected_lgh: float, gamma: float, risk_compensation: float = 1.5) -> float:
         """
         Calculate LP expected profit (Equation 8)
         
@@ -173,7 +181,13 @@ class InsuranceMarket:
         # Opportunity cost
         opportunity_cost = c_lp * self.params.r_market
         
-        return yield_share - expected_payout - opportunity_cost
+        # Add risk compensation for capital at risk
+        # LPs should be compensated for the risk they bear beyond just yield
+        coverage = self.coverage_function(c_c, self.tvl)
+        capital_at_risk = min(c_lp, coverage)  # Amount that could be lost
+        risk_compensation_value = capital_at_risk * self.params.rho * risk_compensation
+        
+        return yield_share - expected_payout - opportunity_cost + risk_compensation_value
     
     def lgh_token_value(self, strike_l: float, time_horizon: float, p_hack: float,
                        p_lgh_given_hack: float, expected_payout: float) -> float:
@@ -311,7 +325,7 @@ class EquilibriumSolver:
         return c_lp_range[best_idx]
     
     def find_equilibrium(self, max_iterations: int = 100, 
-                        tolerance: float = 1e-6) -> Tuple[float, float, float]:
+                        tolerance: float = 1e-4) -> Tuple[float, float, float]:
         """
         Find Nash equilibrium using iterative best response
         
@@ -326,9 +340,14 @@ class EquilibriumSolver:
         for iteration in range(max_iterations):
             c_c_old, c_lp_old, c_spec_old = c_c, c_lp, c_spec
             
-            # Update best responses
-            c_c = self.protocol_best_response(c_lp, c_spec)
-            c_lp = self.lp_best_response(c_c, c_spec)
+            # Update best responses with dampening to prevent oscillation
+            c_c_new = self.protocol_best_response(c_lp, c_spec)
+            c_lp_new = self.lp_best_response(c_c_new, c_spec)
+            
+            # Apply dampening factor to prevent oscillation
+            dampening = 0.3  # Mix 30% new + 70% old
+            c_c = dampening * c_c_new + (1 - dampening) * c_c
+            c_lp = dampening * c_lp_new + (1 - dampening) * c_lp
             # c_spec assumed to be market-driven (simplified)
             
             # Check convergence

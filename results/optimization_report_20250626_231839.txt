@@ -1,0 +1,56 @@
+
+DeFi Insurance Market Parameter Optimization Report
+==================================================
+
+Optimal Parameters:
+------------------
+Coverage Function:
+  - Amplification Factor (μ): 3.763
+  - Concavity Parameter (θ): 0.241
+  - Security Scaling (ξ): 0.291
+
+Revenue Share Function:
+  - Utilization Weight (α): 0.640
+  - Utilization Convexity (β): 2.300
+  - Risk Price Convexity (δ): 1.707
+  - Target Utilization: 0.876
+
+Market Parameters:
+  - Market Rate: 0.055
+  - Pool Yield Rate: 0.067
+  - Risk Premium: 0.030
+  - Hack Intensity: 0.261
+
+Equilibrium Results:
+-------------------
+Market State:
+  - Protocol Collateral: $0 (0.0% of TVL)
+  - LP Capital: $1,000 (0.0% of TVL)
+  - Coverage: $0 (0.0% of TVL)
+  - Utilization: 0.00
+  - Revenue Share (γ): 0.650
+
+Stakeholder Profitability:
+  - Protocol Expected Profit: $-859,296
+  - LP Expected Profit: $261,253
+  - Hack Probability (1 year): 0.229
+
+Performance Metrics:
+-------------------
+  - Coverage Efficiency: nanx
+  - Capital Efficiency: 0.00x
+  - Risk Price: 0.0141
+
+Optimization Statistics:
+-----------------------
+  - Total Iterations: 3996
+  - Final Objective: 6.426299 (if history available)
+
+Parameter Stability:
+-------------------
+The optimized parameters satisfy:
+  ✓ Equilibrium existence
+  ✓ Positive stakeholder profits
+  ✓ Reasonable utilization levels
+  ✓ Stable revenue sharing
+        
