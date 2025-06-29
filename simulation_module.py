@@ -631,13 +631,13 @@ def run_comprehensive_simulation():
     
     # Use base parameters (could be optimized parameters from optimization module)
     params = MarketParameters(
-        mu=2.5,
+        mu=1000.0,
         theta=0.6,
         xi=0.15,
         alpha=0.7,
         beta=1.8,
         delta=1.5,
-        u_target=0.8,
+        u_target=0.2,
         r_market=0.05,
         r_pool=0.08,
         rho=0.025,
