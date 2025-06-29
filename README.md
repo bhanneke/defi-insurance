@@ -1,5 +1,4 @@
 ## work in progress ##
-
 # Decentralized Finance: A Market Mechanism for Cybersecurity Risk Insurance
 
 This repository contains the complete implementation and replication code for the academic paper **"Decentralized Finance: A Market Mechanism for Cybersecurity Risk Insurance"** by Björn Hanneke (Goethe University Frankfurt).
@@ -58,6 +57,21 @@ The rapid growth of Decentralized Finance has introduced significant cybersecuri
 
 ### Running the Analysis
 
+#### Quick Verification (30 seconds)
+Test that the mechanism works:
+```bash
+python -c "
+from defi_insurance_core import InsuranceMarket, MarketParameters
+params = MarketParameters(mu=1000.0, theta=0.5, alpha=0.7, u_target=0.2)
+market = InsuranceMarket(params)
+market.tvl = 100_000_000
+market.c_c, market.c_lp, market.c_spec = 252_526, 1_011_096, 3_000_000
+coverage = market.coverage_function(market.c_c, market.tvl)
+print(f'Coverage: \${coverage:,.0f} ({coverage/market.tvl:.1%} of TVL)')
+print('✅ Mechanism works!')
+"
+```
+
 #### Complete Replication
 To reproduce all paper results:
 ```bash
@@ -68,15 +82,22 @@ python main_runner.py
 
 **1. Core Mechanism Analysis:**
 ```python
-from defi_insurance_core import DeFiInsuranceModel
+from defi_insurance_core import InsuranceMarket, MarketParameters
 
 # Initialize the insurance model
-model = DeFiInsuranceModel()
+params = MarketParameters(mu=1000.0, theta=0.5, alpha=0.7, u_target=0.2)
+market = InsuranceMarket(params)
 
-# Run basic equilibrium analysis
-equilibrium = model.find_equilibrium()
-print(f"Equilibrium collateral: {equilibrium['collateral']}")
-print(f"LP capital: {equilibrium['lp_capital']}")
+# Set market conditions
+market.tvl = 100_000_000  # $100M TVL
+market.c_c = 5_000_000    # $5M protocol collateral
+market.c_lp = 10_000_000  # $10M LP capital
+
+# Calculate coverage and market state
+coverage = market.coverage_function(market.c_c, market.tvl)
+market_state = market.get_market_state()
+print(f"Maximum coverage: ${coverage:,.0f}")
+print(f"Utilization: {market.utilization():.2%}")
 ```
 
 **2. Monte Carlo Simulations:**
@@ -216,9 +237,3 @@ This repository primarily serves academic replication purposes. For questions ab
 ## 📄 License
 
 This code is provided for academic research and replication purposes. Please respect academic integrity guidelines and cite appropriately.
-
----
-
-**Author**: Björn Hanneke  
-**Institution**: Chair of Information Management and Information Systems, Goethe University Frankfurt  
-**ORCID**: https://orcid.org/0009-0000-7466-9581
