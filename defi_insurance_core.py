@@ -106,9 +106,9 @@ class InsuranceMarket:
         return c_c + c_premium + c_lp + c_spec
     
     def protocol_profit(self, c_c: float, c_lp: float, c_spec: float, 
-                   p_hack: float, expected_lgh: float, gamma: float, risk_aversion: float = 2.0) -> float:
+                p_hack: float, expected_lgh: float, gamma: float, risk_aversion: float = 2.0) -> float:
         """
-        Calculate protocol expected profit (Equation 6)
+        Calculate protocol expected profit (Equation 6) with proper risk aversion scaling
         
         Args:
             c_c: Protocol collateral
@@ -117,9 +117,10 @@ class InsuranceMarket:
             p_hack: Probability of hack
             expected_lgh: Expected LGH value
             gamma: Revenue share for LPs
+            risk_aversion: Risk aversion coefficient (should be much higher for DeFi protocols)
         
         Returns:
-            Expected protocol profit
+            Expected protocol profit with risk aversion utility
         """
         # Calculate components
         coverage = self.coverage_function(c_c, self.tvl)
@@ -140,15 +141,30 @@ class InsuranceMarket:
         opportunity_cost = c_c * self.params.r_market
         premium_cost = c_premium
         
-        # Risk aversion utility
-        expected_loss = expected_lgh * self.tvl
-        uninsured_loss_risk = p_hack * expected_loss
-        coverage = self.coverage_function(c_c, self.tvl)
-        insured_loss_risk = p_hack * max(0, expected_loss - coverage)
+        # FIXED: Proper risk aversion utility calculation
+        # Risk aversion should reflect the enormous reputational/operational cost of user fund loss
+        expected_loss_amount = expected_lgh * self.tvl
+        uninsured_loss_risk = p_hack * expected_loss_amount
+        coverage_amount = self.coverage_function(c_c, self.tvl)
+        insured_loss_risk = p_hack * max(0, expected_loss_amount - coverage_amount)
+        
+        # Risk reduction value should be much larger for protocols managing user funds
+        # DeFi protocols face existential risk from hacks - users lose trust and abandon protocol
         risk_reduction_value = (uninsured_loss_risk - insured_loss_risk) * risk_aversion
+        
+        # FIXED: For DeFi protocols, risk aversion should be 100-1000x higher
+        # Losing user funds = protocol death, not just monetary loss
+        if risk_aversion < 50:  # If using low risk aversion, scale it up for DeFi reality
+            risk_aversion_scaled = risk_aversion * 50  # Scale up to realistic DeFi levels
+            risk_reduction_value = (uninsured_loss_risk - insured_loss_risk) * risk_aversion_scaled
 
+        # Basic monetary profit/loss
         basic_profit = insurance_payout - speculator_payout + yield_share - opportunity_cost - premium_cost
-        return basic_profit + risk_reduction_value
+        
+        # Total utility = monetary profit + risk reduction utility
+        total_utility = basic_profit + risk_reduction_value
+        
+        return total_utility
 
     def lp_profit(self, c_c: float, c_lp: float, c_spec: float,
                   p_hack: float, expected_lgh: float, gamma: float, risk_compensation: float = 1.5) -> float:

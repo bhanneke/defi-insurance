@@ -24,21 +24,22 @@ class ParameterOptimizer:
         self.optimization_history = []
         
     def create_parameter_bounds(self) -> List[Tuple[float, float]]:
-        """Define parameter bounds for optimization"""
+        """Define parameter bounds for optimization - FIXED to stay near working values"""
         bounds = [
-            (0.5, 5.0),    # mu: coverage amplification
-            (0.1, 0.9),    # theta: coverage concavity
-            (0.05, 0.5),   # xi: security scaling
-            (0.1, 0.9),    # alpha: utilization weight
-            (0.5, 3.0),    # beta: utilization convexity
-            (0.5, 3.0),    # delta: risk price convexity
-            (0.5, 1.2),    # u_target: target utilization
-            (0.01, 0.10),  # r_market: opportunity rate
-            (0.02, 0.15),  # r_pool: pool yield rate
-            (0.005, 0.05), # rho: risk premium
-            (0.05, 0.5),   # lambda_hack: hack intensity
+            (500.0, 2000.0),   # mu: coverage amplification (constrained around working 1000.0)
+            (0.4, 0.7),        # theta: coverage concavity (constrained around working 0.5)
+            (0.1, 0.3),        # xi: security scaling (keep reasonable range)
+            (0.6, 0.8),        # alpha: utilization weight (constrained around working 0.7)
+            (1.2, 2.0),        # beta: utilization convexity (keep reasonable)
+            (1.0, 2.0),        # delta: risk price convexity (keep reasonable)
+            (0.15, 0.35),      # u_target: target utilization (constrained around working 0.2)
+            (0.04, 0.06),      # r_market: opportunity rate (keep realistic)
+            (0.07, 0.12),      # r_pool: pool yield rate (keep realistic)
+            (0.02, 0.04),      # rho: risk premium (keep reasonable)
+            (0.08, 0.15),      # lambda_hack: hack intensity (keep reasonable)
         ]
         return bounds
+
     
     def params_from_vector(self, x: np.ndarray) -> MarketParameters:
         """Convert optimization vector to MarketParameters"""

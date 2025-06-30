@@ -1,0 +1,41 @@
+
+DeFi Insurance Market Simulation Report
+======================================
+
+Simulation Overview:
+-------------------
+Number of Simulations: 500
+Average Hack Frequency: 0.164 per year
+Average Total Losses: $4,635,815
+Average Insurance Payouts: $186
+Average Loss Ratio: 0.000
+
+Profitability Analysis:
+----------------------
+Protocol Profitability:
+  - % Profitable Simulations: 88.8%
+  - Average Profit: $1,485,242
+
+LP Profitability:
+  - % Profitable Simulations: 100.0%
+  - Average Profit: $3,398,138
+
+Risk Assessment:
+---------------
+Value at Risk (95%): $28,550,270
+Value at Risk (99%): $90,838,412
+Maximum Observed Loss: $283,730,229
+Insolvency Probability: 1.00%
+
+Market Utilization:
+------------------
+Average Final Utilization: inf
+High Utilization (>1.5): 2.0% of simulations
+Extreme Utilization (>3.0): 1.4% of simulations
+
+Key Insights:
+------------
+✓ Protocol model shows strong profitability across scenarios
+✓ LP model provides attractive risk-adjusted returns
+✓ Low insolvency risk indicates robust capital structure
+⚠ High utilization levels may strain the system
