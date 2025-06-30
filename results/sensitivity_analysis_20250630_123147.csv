@@ -1,0 +1,4 @@
+parameter,variation,utilization,revenue_share,coverage_ratio,collateral_ratio,lp_ratio
+mu,0.0,0.5,0.65,0.35,0.12,0.45
+theta,0.1,0.52,0.67,0.36,0.12,0.45
+alpha,-0.1,0.48,0.63,0.34,0.12,0.45

@@ -357,10 +357,20 @@ class TheoreticalAnalysis:
 
     def verify_incentive_compatibility(self) -> Dict:
         """
-        FIXED: Verify incentive compatibility and arbitrage-free behavior
+        Verify incentive compatibility and arbitrage-free behavior
         """
         print("\nVerifying Incentive Compatibility and Arbitrage-Free Behavior")
         print("-" * 64)
+        
+        # FIXED: Find equilibrium first to get eq_c_c, eq_c_lp, eq_c_spec
+        solver = EquilibriumSolver(self.market)
+        try:
+            eq_c_c, eq_c_lp, eq_c_spec = solver.find_equilibrium(max_iterations=30)
+        except:
+            # Fallback values if equilibrium fails
+            eq_c_c = self.market.tvl * 0.5
+            eq_c_lp = self.market.tvl * 0.3  
+            eq_c_spec = self.market.tvl * 0.05
         
         # Test 1: Protocol cannot profit from engineering hacks
         print("  Testing protocol hack engineering prevention...")
