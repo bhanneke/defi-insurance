@@ -17,14 +17,23 @@ The rapid growth of Decentralized Finance has introduced significant cybersecuri
 📁 Repository Structure
 
 ├── defi_insurance_core.py      # Core mechanism implementation
+
 ├── simulation_module.py        # Monte Carlo simulations and scenario analysis
+
 ├── theoretical_proofs.py       # Mathematical proofs and analytical validation
+
 ├── parameter_optimization.py   # Parameter calibration and sensitivity analysis
+
 ├── main_runner.py             # Main execution script for all analyses
+
 ├── results/                   # Generated results and outputs
+
 ├── final_results/            # Final paper results and figures
+
 ├── requirements.txt          # Python dependencies
+
 ├── .env.template            # Environment configuration template
+
 └── README.md               # This file
 
 
