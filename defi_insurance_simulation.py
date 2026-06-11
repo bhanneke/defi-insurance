@@ -272,6 +272,7 @@ def run_single_simulation(params: SimulationParams, run_seed: int) -> Dict[str, 
         cum_p              += payout_total
         cum_payouts[t]      = cum_p
         cum_p_LP           += payout_LP
+        cum_payouts_LP[t]   = cum_p_LP
 
         cum_burn           += daily_burn_CC[t]
         cum_burn_CC[t]      = cum_burn
