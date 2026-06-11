@@ -10,9 +10,12 @@ The paper proposes a two-layer market mechanism for on-chain cybersecurity risk 
 
 | Path | Description |
 |---|---|
-| `defi_insurance_simulation.py` | Monte-Carlo simulation behind Section 6 ("Stylized Simulation") and Appendix B of the paper |
-| `outputs/` | Reference outputs (figures and run-level metrics) |
+| `defi_insurance_simulation.py` | Monte-Carlo simulation behind Section 6 ("Stylized Simulation") and Appendix B — **revised baseline** (θ=0.5, μ=3, U_target=15, risk-sensitive prudential cap κ_U=100; tracks insolvency shortfalls and supports an `incident_scale` stress multiplier) |
+| `outputs/` | Reference outputs of the revised baseline (figures and run-level metrics) |
+| `defi_insurance_simulation_pisa2026.py`, `outputs_pisa2026/` | Exact code and outputs of the PISA 2026 workshop version (θ=0.10, μ=5, fixed cap U_max=20) |
 | `archive/legacy-2025-07/` | Code of an earlier working-paper iteration (loss-given-hack strike tokens, premium payments, Stackelberg operator analysis). Kept for provenance only — it does **not** correspond to the published paper. |
+
+The revised baseline operates both core mechanisms in their intended regimes (the yield-share of Eq. 8 stays interior, the dynamic cap of Eq. 5 is active) and raises the protocols' collateral-to-coverage ratio to ≈11%, making the forfeiture penalty economically meaningful. A 4× hack-intensity stress run is reproduced with `incident_scale=4.0`.
 
 ## Running the simulation
 

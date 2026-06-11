@@ -29,20 +29,17 @@ class SimulationParams:
     seed: int = 1234
 
     # Eq. (2): coverage = mu * CC^theta * (1 + xi_i)   (all in $M)
-    mu: float = 3.0
-    theta: float = 0.50
+    mu: float = 5.0
+    theta: float = 0.10
 
     # Operator fee
     phi: float = 0.01
 
     # Prudential cap U_max (Eq. 5)
     U_min: float = 1.0
-    U_max_hi: float = 30.0
-    kappa_Ucap: float = 100.0
-    use_fixed_Umax: bool = False
-
-    # Hack arrival multiplier relative to market-implied rates (stress: 4.0)
-    incident_scale: float = 1.0
+    U_max_hi: float = 20.0
+    kappa_Ucap: float = 0.0
+    use_fixed_Umax: bool = True
 
     # Pricing mix for gamma (Eq. 8)
     alpha: float = 0.6
@@ -51,7 +48,7 @@ class SimulationParams:
     omega: Tuple[float, float, float, float] = (0.40, 0.30, 0.20, 0.10)
 
     # Targets
-    U_target: float = 15.0
+    U_target: float = 10.0
 
     # Market returns / premia (annual)
     r_market: float = 0.05
@@ -174,8 +171,6 @@ def run_single_simulation(params: SimulationParams, run_seed: int) -> Dict[str, 
     daily_burn_CC = np.zeros(nT, dtype=float)
     cum_burn_CC   = np.zeros(nT, dtype=float)
     cum_burn = 0.0
-    daily_shortfall = np.zeros(nT, dtype=float)  # unpaid claims (insolvency events)
-    CC0 = None; coverage0 = None
 
     coverage_eff_path = np.zeros(nT, float)
     lp_take_series    = np.zeros(nT, float)
@@ -219,10 +214,7 @@ def run_single_simulation(params: SimulationParams, run_seed: int) -> Dict[str, 
                                        p_anchor, params.r_market,
                                        pop["TVL"][i])
         coverage_i  = params.mu * (CC ** params.theta) * (1.0 + pop["xi"])  # $M
-        coverage_i  = np.minimum(coverage_i, pop["TVL"])  # coverage cannot exceed insured assets
         coverage_raw = coverage_i.sum()
-        if t == 0:
-            CC0 = CC.copy(); coverage0 = coverage_i.copy()
 
         # 4) Cap and U
         coverage_eff        = min(coverage_raw, Umax_today * CLP)
@@ -244,7 +236,7 @@ def run_single_simulation(params: SimulationParams, run_seed: int) -> Dict[str, 
             for _ in range(k):
                 idx     = rng.choice(params.n_protocols, p=weights)
                 loss_i  = pop["Lbar"][idx] * pop["TVL"][idx]
-                cov_i   = float(min(params.mu * (CC[idx] ** params.theta) * (1.0 + pop["xi"][idx]), pop["TVL"][idx]))
+                cov_i   = float(params.mu * (CC[idx] ** params.theta) * (1.0 + pop["xi"][idx]))
                 pay_i   = min(loss_i, cov_i)
                 if pay_i <= 0.0:
                     continue
@@ -258,7 +250,6 @@ def run_single_simulation(params: SimulationParams, run_seed: int) -> Dict[str, 
                 # Remaining from LP pool
                 from_CLP = min(remaining, CLP)
                 CLP -= from_CLP
-                daily_shortfall[t] += remaining - from_CLP
 
                 payout_total += (from_CC + from_CLP)
                 payout_LP    += from_CLP
@@ -388,9 +379,6 @@ def run_single_simulation(params: SimulationParams, run_seed: int) -> Dict[str, 
         prot_real_ret=prot_real_ret,
         proto_snapshot=proto_snapshot,
         T_years=T_years,
-        daily_shortfall=daily_shortfall,
-        CC0=CC0,
-        coverage0=coverage0,
     )
 
 # ---------------------------- MC, summary, plots ----------------------------
