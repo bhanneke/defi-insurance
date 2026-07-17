@@ -1,0 +1,163 @@
+"""Figures for the dynamic-game experiments.
+
+Palette: validated categorical slots (dataviz skill reference instance),
+fixed order blue, orange, green, purple, red; red and green never adjacent.
+One axis per panel; recessive grid; direct labels where possible.
+"""
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+BLUE, ORANGE, GREEN, PURPLE, RED = ("#2a78d6", "#eda100", "#1baf7a",
+                                    "#4a3aa7", "#e34948")
+INK, MUTED, GRID = "#1a1a19", "#52514e", "#e5e4e0"
+
+plt.rcParams.update({
+    "figure.dpi": 150, "savefig.dpi": 150, "font.size": 9,
+    "axes.edgecolor": MUTED, "axes.labelcolor": INK, "text.color": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED,
+    "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.6,
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.titlesize": 9.5, "axes.titleweight": "bold",
+    "figure.facecolor": "white", "axes.facecolor": "white",
+})
+
+
+def _band(ax, ep, col, color, label):
+    g = ep.groupby("t")[col]
+    m, lo, hi = g.mean(), g.quantile(0.05), g.quantile(0.95)
+    ax.plot(m.index + 1, m.values, color=color, lw=2, label=label)
+    ax.fill_between(m.index + 1, lo.values, hi.values, color=color, alpha=0.15,
+                    lw=0)
+
+
+def fig_dynamics(ep, path):
+    fig, axes = plt.subplots(2, 2, figsize=(8.6, 5.6))
+    ax = axes[0, 0]
+    _band(ax, ep, "U", BLUE, "utilization $U$")
+    _band(ax, ep, "U_cap", ORANGE, "prudential cap $U_{max}$")
+    ax.set_title("Utilization vs. dynamic cap")
+    ax.set_xlabel("quarter"); ax.legend(frameon=False)
+
+    ax = axes[0, 1]
+    _band(ax, ep, "gamma", BLUE, r"applied $\gamma_t$ (blended)")
+    _band(ax, ep, "gamma_raw", ORANGE, r"raw $\gamma$ (Eq. 8)")
+    ax.set_title("LP yield share"); ax.set_xlabel("quarter")
+    ax.set_ylim(0, 1); ax.legend(frameon=False)
+
+    ax = axes[1, 0]
+    _band(ax, ep, "CLP", BLUE, "LP capital $C_{LP}$")
+    _band(ax, ep, "sum_CC", ORANGE, "posted collateral $\\Sigma C_C$")
+    ax.set_title("Pool capital ($M)"); ax.set_xlabel("quarter")
+    ax.legend(frameon=False)
+
+    ax = axes[1, 1]
+    cum = ep.sort_values("t").groupby("seed").claims.cumsum()
+    ep2 = ep.assign(cum_claims=cum)
+    _band(ax, ep2, "cum_claims", BLUE, "cumulative claims ($M)")
+    ax.set_title("Cumulative claims ($M)"); ax.set_xlabel("quarter")
+    fig.suptitle("Endogenous-attacker dynamic game: baseline dynamics "
+                 "(mean, 5–95% across seeds)", fontsize=10, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+
+
+def fig_moral_hazard(summaries, path):
+    """summaries: dict regime -> summary dict."""
+    regimes = list(summaries.keys())
+    metrics = [("mean_h", "Equilibrium security $h^*$"),
+               ("hacks_per_year", "Hacks per year"),
+               ("raw_losses_per_year", "Raw hack losses ($M/yr)")]
+    fig, axes = plt.subplots(1, 3, figsize=(8.6, 2.9))
+    x = np.arange(len(regimes))
+    for ax, (key, title) in zip(axes, metrics):
+        vals = [summaries[r][key] for r in regimes]
+        ax.bar(x, vals, width=0.55, color=BLUE, zorder=3)
+        for xi, v in zip(x, vals):
+            ax.text(xi, v, f" {v:.2f}", ha="center", va="bottom", fontsize=8,
+                    color=INK)
+        ax.set_xticks(x)
+        ax.set_xticklabels([r.replace("_", "\n") for r in regimes], fontsize=8)
+        ax.set_title(title)
+        ax.grid(axis="x", visible=False)
+    fig.suptitle("Moral hazard and the collateral lever (strategic attacker)",
+                 fontsize=10, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+
+
+def fig_eta_sweep(decile_profiles, loss_rates, path):
+    """decile_profiles: dict eta -> (deciles 1..10, annual attack prob).
+    loss_rates: dict eta -> loss rate bps."""
+    # order low->high eta; colors keep red/green non-adjacent
+    colors = [BLUE, ORANGE, GREEN, PURPLE, RED]
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(8.6, 3.4),
+                                  gridspec_kw={"width_ratios": [3, 2]})
+    items = sorted(decile_profiles.items())
+    ends = np.array([100 * prof[1][-1] for _, prof in items])
+    # spread end-of-line labels so they never collide
+    order = np.argsort(ends)
+    ymax = ends.max()
+    spread = ends.copy()
+    min_gap = 0.055 * ymax
+    for k in range(1, len(order)):
+        lo_i, hi_i = order[k - 1], order[k]
+        if spread[hi_i] - spread[lo_i] < min_gap:
+            spread[hi_i] = spread[lo_i] + min_gap
+    for c, (eta, prof), y_lab in zip(colors, items, spread):
+        d, p = prof
+        ax.plot(d, 100 * p, color=c, lw=2)
+        ax.annotate(f"$\\eta$={eta:g}", xy=(10, y_lab),
+                    xytext=(10.15, y_lab), textcoords="data",
+                    color=c, fontsize=8, va="center")
+    ax.set_xticks(range(1, 11))
+    ax.set_xlabel("TVL decile (1 = smallest)")
+    ax.set_ylabel("annualized attack probability (%)")
+    ax.set_title("Who gets attacked: value-elasticity of attack cost")
+    ax.set_xlim(0.8, 11.6)
+    ax.set_ylim(top=1.12 * float(spread.max()))
+
+    etas = sorted(loss_rates.keys())
+    ax2.plot(etas, [loss_rates[e] for e in etas], color=BLUE, lw=2,
+             marker="o", ms=5)
+    ax2.axvline(0.20, color=MUTED, lw=1, ls="--")
+    ax2.annotate("FIRM estimate\n$\\hat\\eta \\approx 0.20$", xy=(0.20, 0),
+                 xytext=(0.23, 0.75), textcoords=("data", "axes fraction"),
+                 fontsize=8, color=MUTED)
+    ax2.set_xlabel(r"value-elasticity of attack cost $\eta$")
+    ax2.set_ylabel("loss rate (bps of coverage/yr)")
+    ax2.set_title("System loss rate vs. $\\eta$")
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+
+
+def fig_frontier(inc, frontier, P, path):
+    """Value-adjusted frontier: effort and value are correlated in
+    equilibrium, so the display residualizes the estimated value slope
+    (points shifted to the median V) before drawing the tau=0.10 fit and
+    the calibrated theoretical floor at median V."""
+    from attacker import attack_cost
+    fig, ax = plt.subplots(figsize=(6.4, 4.2))
+    Vmed = float(inc.V.median())
+    rel = frontier["relative"]
+    b_adj = np.exp(np.log(inc.b_realized)
+                   - rel["v_elast"] * (np.log(inc.V) - np.log(Vmed)))
+    ax.scatter(inc.e, b_adj, s=14, color=BLUE, alpha=0.45, lw=0,
+               zorder=3, label="simulated incidents (value-adjusted)")
+    eg = np.linspace(inc.e.min(), inc.e.max(), 100)
+    bhat = np.exp(rel["const"] + rel["kappa_hat"] * np.log(eg)
+                  + rel["v_elast"] * np.log(Vmed))
+    ax.plot(eg, bhat, color=ORANGE, lw=2,
+            label=r"estimated $\tau=0.10$ frontier")
+    floor = attack_cost(eg, Vmed, P.attacker) / Vmed
+    ax.plot(eg, floor, color=INK, lw=1.4, ls="--",
+            label="theoretical floor $c(e,V)/V$ at median $V$")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlabel("attack effort $e$ (actions)")
+    ax.set_ylabel("blast radius $b = L/V$, adjusted to median $V$")
+    ax.set_title("The participation frontier re-emerges in the simulated "
+                 "equilibrium")
+    ax.legend(frameon=False, fontsize=8, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
