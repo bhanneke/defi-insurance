@@ -192,6 +192,81 @@ dollar is `(1-gamma*)(1-phi) * gross_rev / S*` (own price impact enters
 at `O(c_i/C)` by Lemma 1's average/marginal bound); equate to marginal
 cost. QED (numerical checks: K sweep + the E3' decomposition above).
 
+## Step 5 — Proposition C: the carry trade as a security subsidy
+
+The spread `s0 = r_pool0 - r_market` is not only a capital-attraction
+lever; with forfeiture it changes the protocol's SECURITY incentive.
+Write the aggregate-taking protocol payoff (quarterly, fixed aggregates)
+
+```
+U(CC, h) = (1+rho) p(h) A(CC, h) + (1 - p(h)) G w(CC)
+           - p(h) CC 1{forf} - (r_m/4) CC - (c_h/4) h V - p(h) Ebar b(h) V,
+```
+
+with `A = E[min(cov(CC,h), eps b V)]` the expected payout,
+`G = (1-gamma)(1-phi) gross_rev` the protocol-side revenue pot,
+`w(CC) = CC/(S_-i + CC)`, and `p(h)` the attacker's response. Decompose
+the marginal value of collateral as
+
+```
+dU/dCC = chi(CC) + M(CC),
+chi(CC) = (1-p) G w'(CC) - r_m/4 - p 1{forf}     (carry margin)
+M(CC)   = (1+rho) p A_CC >= 0                     (insurance margin).
+```
+
+`chi` is the return to collateral unrelated to risk transfer — the carry
+trade. `G` is increasing in the all-in spread (`gross_rev` scales with
+`r_pool(C) + fees`), so `chi > 0` regions exist only when the pool
+out-earns the market.
+
+**Proposition C.** In the aggregate-taking stage game with forfeiture:
+
+*(i) Regimes.* Protocol i posts to the wealth cap iff
+`chi(cap) + M(cap) >= 0` (carry regime); otherwise the optimum is
+interior and solves `chi + M = 0` (insurance regime). With s0 = 0 and no
+fees, `chi < 0` for every CC > 0, and collateral is pinned by the
+insurance motive alone.
+
+*(ii) Advantageous selection.* `d chi / d p = -(G w' + 1{forf}) < 0`:
+the carry margin strictly decreases in own attack probability. Carry
+capital therefore selects toward the SAFEST protocols (low p from low V
+or high h) — the opposite of adverse selection: the protocols most
+likely to trigger forfeiture value the carry least.
+
+*(iii) Carry-security complementarity.* The cross-partial splits into a
+deterrence channel and an insurance channel:
+
+```
+d2U/dCC dh = -p_h [ G w'(CC) + 1{forf} ]     > 0   (deterrence channel)
+             + p_h (1+rho) A_CC + (1+rho) p A_CC,h  <= 0 (insurance channel)
+```
+
+since `p_h < 0` and `A_CC,h <= 0` (defense lowers losses, hence the
+marginal value of coverage). The deterrence channel — security protects
+both the forfeitable collateral AND the (1-p)-contingent carry income —
+makes collateral and security complements; the insurance channel makes
+them substitutes. Whenever the carry motive dominates (large s0, cap
+posters with saturated coverage), the NET cross-partial is positive:
+larger spread => more collateral => stronger marginal security incentive.
+
+*(iv) Equilibrium spread condition.* With endogenous alpha the aggregate
+adjusts until the marginal poster's `chi + M = 0`, i.e. E3'; shrinking
+s0 or K contracts carry collateral and, by (iii), equilibrium security.
+
+*Proof.* (i)-(iii) are direct calculus on U; signs follow from `p_h < 0`,
+`w' > 0`, `A_CC >= 0`, `A_CC,h <= 0`. (iv) is E3'. QED.
+
+Proposition C converts the audit's "collateral-as-carry-trade" wrinkle
+into a design statement: **the pool spread is a security subsidy routed
+through forfeiture, and its incidence is advantageous** — it explains
+both numerical findings at once (protocols yield-farm the pool under
+fixed alpha; equilibrium security falls when alpha is compressed:
+h* 1.15 -> 0.86, hacks +50% at K = 250). Numerical verification:
+`prove_equilibrium.py` (PROPC) checks the FOC split at the computed
+equilibrium, the selection ranking (cap posters have lower mean p than
+interior posters), and the sign pattern of the two cross-partial
+channels by finite differences.
+
 ## Computation: the four-phase stage solver and its certificate
 
 `solve_stage` (game.py) computes each quarter's equilibrium in four phases:

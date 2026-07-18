@@ -56,5 +56,16 @@
     "monotone": true,
     "extinct": false,
     "alpha_compressed": true
+  },
+  "PROPC": {
+    "verdict": "PROVED",
+    "n_cap": 494,
+    "p_cap": 0.0008734467258183922,
+    "p_interior": 0.019951646717952052,
+    "selection_ok": true,
+    "foc_max_abs": 0.0027447743106869755,
+    "det_channel_ok": true,
+    "frac_cross_positive": 0.9915074309978769,
+    "frac_cross_positive_collateral_weighted": 0.9712563470360809
   }
 }

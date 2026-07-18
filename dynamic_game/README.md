@@ -80,6 +80,7 @@ sampled no-unilateral-deviation check runs at the end (`deviation_check`).
 | `PROOF_NOTES.md` | Equilibrium proofs for the endogenous-alpha extension |
 | `prove_equilibrium.py` | Computational certification (VERDICT output) |
 | `run_extension.py` | Endogenous-alpha experiments -> `results_extension.json` |
+| `make_structure_figs.py` | Game-structure timing diagram + attacker BR surfaces |
 
 Run: `python3 run_experiments.py` (stock python3 with numpy/pandas/scipy/
 statsmodels/matplotlib; ~45 s total).
@@ -171,6 +172,38 @@ Koren, arXiv:2606.22337 — see PROOF_NOTES.md "Provenance"):
   pre-registered "collateral/coverage halves" criterion is not met
   (falls 28%, not 50%) — INCONCLUSIVE as specified, the residual demand
   being insurance-motivated.
+
+## Proposition C: the carry trade is a security subsidy
+
+Formalizes the r_pool − r_market spread (PROOF_NOTES.md Step 5; verified
+in `prove_equilibrium.py`, PROPC — PROVED). Decompose the marginal value
+of collateral into a carry margin `chi = (1-p)·G·w'(CC) − r_market/4 − p`
+and an insurance margin `M = (1+rho)·p·A_CC >= 0`. Then, with forfeiture:
+
+1. **Two regimes**: post-to-the-wealth-cap carry iff `chi + M >= 0` at
+   the cap; otherwise interior, insurance-pinned. (Baseline: 494/500 at
+   the cap.)
+2. **Advantageous selection**: `d chi/dp = −(G w' + 1) < 0` — carry
+   capital selects toward the SAFEST protocols. Measured: cap posters'
+   mean attack probability 0.0009 vs 0.0200 for interior posters (22x).
+3. **Carry-security complementarity**: the cross-partial d2U/dCC dh
+   splits into a positive deterrence channel `−p_h(G w' + 1)` (security
+   protects the forfeitable collateral AND the (1−p)-contingent carry
+   income) and a negative insurance channel. Net positive for 99.2% of
+   protocols (97.1% collateral-weighted): a larger spread loads more
+   collateral, which strengthens the marginal incentive to defend.
+4. Together with E3' this explains both numerical findings in one
+   statement: protocols yield-farm the pool under fixed alpha, and
+   compressing alpha (K down) weakens equilibrium security (h* 1.15 ->
+   0.86, hacks +50%) — the spread is a security subsidy routed through
+   forfeiture, with advantageous incidence.
+
+## Figures
+
+`outputs/`: fig_game_structure (players/timing/flows swimlane),
+fig_attacker_surface (e*, blast radius, attack probability over the
+(V, h) plane with the V*(h) participation threshold), fig_dynamics,
+fig_moral_hazard, fig_eta_sweep, fig_frontier, fig_pool_alpha.
 
 ## Deliberate scope choices / extensions
 
