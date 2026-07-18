@@ -205,6 +205,26 @@ fig_attacker_surface (e*, blast radius, attack probability over the
 (V, h) plane with the V*(h) participation threshold), fig_dynamics,
 fig_moral_hazard, fig_eta_sweep, fig_frontier, fig_pool_alpha.
 
+## Interactive demonstrator (Streamlit)
+
+`streamlit_app.py` at the repository root wraps this exact engine (no
+port, no drift): sliders for the attacker primitives (eta, kappa, F_bar,
+q), the mechanism (forfeiture, mu, theta), pool economics (r_market,
+r_pool, fixed vs. endogenous alpha with capacity K, C_LP0) and the
+simulation size; tabs for dynamics, the three-regime moral-hazard
+comparison, attacker best-response surfaces, the frontier re-estimation,
+and the game-structure diagram. Local: `streamlit run streamlit_app.py`.
+
+Deploy (shareable URL): share.streamlit.io -> sign in with GitHub ->
+New app -> repository `bhanneke/defi-insurance`, branch
+`dynamic-game-addon` (or main after merge), main file `streamlit_app.py`
+-> Deploy. The repo is private: grant the Streamlit GitHub app access to
+it (supported), or make the repo public for one-click sharing. Community
+Cloud installs `requirements.txt` from the repo root automatically.
+
+The app is a demonstrator: indicative small-sample runs; canonical
+experiments and certification stay in this folder.
+
 ## Deliberate scope choices / extensions
 
 - Attacker targets protocol TVL only; the insurance pool itself and posted

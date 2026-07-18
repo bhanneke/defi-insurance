@@ -24,6 +24,16 @@ plt.rcParams.update({
 })
 
 
+def _finish(fig, path):
+    """Save-and-close when a path is given; return the figure otherwise
+    (interactive/Streamlit use)."""
+    if path is None:
+        return fig
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return None
+
+
 def _band(ax, ep, col, color, label):
     g = ep.groupby("t")[col]
     m, lo, hi = g.mean(), g.quantile(0.05), g.quantile(0.95)
@@ -32,7 +42,7 @@ def _band(ax, ep, col, color, label):
                     lw=0)
 
 
-def fig_dynamics(ep, path):
+def fig_dynamics(ep, path=None):
     fig, axes = plt.subplots(2, 2, figsize=(8.6, 5.6))
     ax = axes[0, 0]
     _band(ax, ep, "U", BLUE, "utilization $U$")
@@ -60,10 +70,10 @@ def fig_dynamics(ep, path):
     fig.suptitle("Endogenous-attacker dynamic game: baseline dynamics "
                  "(mean, 5–95% across seeds)", fontsize=10, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+    return _finish(fig, path)
 
 
-def fig_moral_hazard(summaries, path):
+def fig_moral_hazard(summaries, path=None):
     """summaries: dict regime -> summary dict."""
     regimes = list(summaries.keys())
     metrics = [("mean_h", "Equilibrium security $h^*$"),
@@ -84,10 +94,10 @@ def fig_moral_hazard(summaries, path):
     fig.suptitle("Moral hazard and the collateral lever (strategic attacker)",
                  fontsize=10, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.93))
-    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+    return _finish(fig, path)
 
 
-def fig_eta_sweep(decile_profiles, loss_rates, path):
+def fig_eta_sweep(decile_profiles, loss_rates, path=None):
     """decile_profiles: dict eta -> (deciles 1..10, annual attack prob).
     loss_rates: dict eta -> loss rate bps."""
     # order low->high eta; colors keep red/green non-adjacent
@@ -129,10 +139,10 @@ def fig_eta_sweep(decile_profiles, loss_rates, path):
     ax2.set_ylabel("loss rate (bps of coverage/yr)")
     ax2.set_title("System loss rate vs. $\\eta$")
     fig.tight_layout()
-    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+    return _finish(fig, path)
 
 
-def fig_game_structure(path):
+def fig_game_structure(path=None):
     """Swimlane timing diagram of one epoch (quarter) of the dynamic game."""
     from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
     fig, ax = plt.subplots(figsize=(11.0, 6.4))
@@ -205,10 +215,10 @@ def fig_game_structure(path):
     ax.set_title("One epoch of the dynamic game: players, timing, and flows",
                  fontsize=11, fontweight="bold", pad=16)
     fig.tight_layout()
-    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+    return _finish(fig, path)
 
 
-def fig_attacker_surface(P, path):
+def fig_attacker_surface(P, path=None):
     """Attacker best-response surfaces over the (V, h) plane, with the
     participation threshold V*(h) overlaid. Sequential single hue."""
     from attacker import attacker_best_response, participation_threshold
@@ -246,10 +256,10 @@ def fig_attacker_surface(P, path):
                  f"($\\eta$={P.attacker.eta}, $\\kappa$={P.attacker.kappa})",
                  fontsize=10, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.93))
-    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+    return _finish(fig, path)
 
 
-def fig_pool_alpha(panels, path):
+def fig_pool_alpha(panels, path=None):
     """Endogenous-alpha extension: sequential single-hue ramp over the
     ordered capacity K (light = tight capacity, dark = fixed alpha)."""
     ramp = {"250": "#9ec4f0", "1000": "#5f9fe8", "4000": "#2a78d6",
@@ -293,11 +303,10 @@ def fig_pool_alpha(panels, path):
                  "does the forfeiture deterrent", fontsize=10,
                  fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    fig.savefig(path, bbox_inches="tight")
-    plt.close(fig)
+    return _finish(fig, path)
 
 
-def fig_frontier(inc, frontier, P, path):
+def fig_frontier(inc, frontier, P, path=None):
     """Value-adjusted frontier: effort and value are correlated in
     equilibrium, so the display residualizes the estimated value slope
     (points shifted to the median V) before drawing the tau=0.10 fit and
@@ -325,4 +334,4 @@ def fig_frontier(inc, frontier, P, path):
                  "equilibrium")
     ax.legend(frameon=False, fontsize=8, loc="upper left")
     fig.tight_layout()
-    fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+    return _finish(fig, path)
