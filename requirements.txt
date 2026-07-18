@@ -5,3 +5,4 @@ scipy>=1.7
 statsmodels>=0.13
 sympy>=1.9
 streamlit>=1.49
+plotly>=5.18

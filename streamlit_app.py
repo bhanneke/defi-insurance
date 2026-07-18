@@ -16,8 +16,9 @@ dynamic_game/ (run_experiments.py, prove_equilibrium.py, PROOF_NOTES.md).
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "dynamic_game"))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_HERE, "dynamic_game"))
+sys.path.insert(0, _HERE)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,6 +30,7 @@ from game import run_game
 from analysis import summarize, frontier_regression, floor_check
 from attacker import participation_threshold
 import figures
+import app_charts
 
 st.set_page_config(page_title="DeFi Insurance Dynamic Game",
                    page_icon="🛡️", layout="wide")
@@ -164,7 +166,7 @@ tabs = st.tabs(["Dynamics", "Moral hazard", "Attacker", "Frontier",
                 "The game"])
 
 with tabs[0]:
-    show(figures.fig_dynamics(ep))
+    st.plotly_chart(app_charts.dynamics_chart(ep), width="stretch")
     st.caption(
         f"Mean with 5–95% bands over {cfg['n_seeds']} seeds. Collateral/"
         f"coverage: {summ['collateral_to_coverage']:.2f}"
@@ -186,7 +188,8 @@ with tabs[1]:
             cfg_r = dict(cfg, forfeiture=forf, insurance_on=ins)
             s_r, _, _ = run_scenario(tuple(sorted(cfg_r.items())))
             regime_summ[name.replace("\n", "_")] = s_r
-    show(figures.fig_moral_hazard(regime_summ))
+    st.plotly_chart(app_charts.moral_hazard_chart(regime_summ),
+                    width="stretch")
 
 with tabs[2]:
     Pf, vstars = attacker_facts(cfg_key)
@@ -194,7 +197,7 @@ with tabs[2]:
     a.metric("V*(h=0) — participation threshold", f"${vstars[0]:.1f}M")
     b_.metric("V*(h=2)", f"${vstars[1]:.1f}M")
     c_.metric("V*(h=4)", f"${vstars[2]:.1f}M")
-    show(figures.fig_attacker_surface(Pf))
+    st.plotly_chart(app_charts.attacker_surface_chart(Pf), width="stretch")
     st.caption(
         "Becker target selection with c(e,V) = (F₀ + γc·e^κ)·V^η. Defense "
         "raises the participation threshold (extensive margin) and lowers "
@@ -210,7 +213,8 @@ with tabs[3]:
         b_.metric("κ̂ (frontier)", f"{fr['relative']['kappa_hat']:.2f}")
         c_.metric("Incidents above theoretical floor",
                   f"{fc['frac_above_floor']:.0%}")
-        show(figures.fig_frontier(inc, fr, params_from(cfg)))
+        st.plotly_chart(app_charts.frontier_chart(inc, fr, params_from(cfg)),
+                        width="stretch")
         st.caption(
             "The FIRM two-margin quantile regression re-estimated on the "
             "simulated equilibrium incidents. The downward bias in η̂ "
