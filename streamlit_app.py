@@ -26,9 +26,10 @@ import pandas as pd
 import streamlit as st
 
 from params import AllParams
-from game import run_game
+from game import run_game, solve_stage, _aggregates_of
 from analysis import summarize, frontier_regression, floor_check
 from attacker import participation_threshold
+from protocols import init_population, utility_cc, eps_quadrature
 import figures
 import app_charts
 
@@ -138,6 +139,42 @@ def attacker_facts(cfg_key: tuple):
     return P, vs
 
 
+@st.cache_data(show_spinner=False, max_entries=8)
+def stage_landscapes(cfg_key: tuple):
+    """First-quarter equilibrium snapshot + utility landscapes U(C_C, h)
+    for three representative protocol sizes (for the 3-D decision tab)."""
+    cfg = dict(cfg_key)
+    P = params_from(cfg)
+    rng = np.random.default_rng(1000)
+    pop = init_population(rng, P)
+    eq = solve_stage(pop, P.game.CLP0, P)
+    br, atk = eq["br"], eq["atk"]
+    agg, _ = _aggregates_of(br["CC"], br["h"], br["p_q"], P.game.CLP0,
+                            pop, P)
+    eps_n, eps_w = eps_quadrature(P)
+    hg = atk["h_grid"]
+    out = {}
+    for label, tv in [("small (~$10M TVL)", 10.0),
+                      ("mid (~$100M TVL)", 100.0),
+                      ("whale (~$1B TVL)", 1000.0)]:
+        i = int(np.argmin(np.abs(pop["TVL"] - tv)))
+        cap = P.proto.cc_tvl_cap * pop["TVL"][i]
+        ccg = np.linspace(0.0, cap, 61)
+        pop_i = {k: np.repeat(v[i:i + 1], ccg.size) for k, v in pop.items()}
+        atk_i = {k: (np.repeat(v[i:i + 1, :], ccg.size, axis=0)
+                     if isinstance(v, np.ndarray) and v.ndim == 2 else v)
+                 for k, v in atk.items()}
+        agg_i = dict(agg, sum_CC_others=np.repeat(
+            agg["sum_CC_others"][i:i + 1], ccg.size))
+        CC_mat = np.broadcast_to(ccg[:, None], (ccg.size, hg.size)).copy()
+        U = utility_cc(CC_mat, pop_i, atk_i, agg_i, P, eps_n, eps_w)
+        out[label] = dict(ccg=ccg, hg=hg, U=U, cc_star=float(br["CC"][i]),
+                          h_star=float(br["h"][i]),
+                          u_star=float(br["utility"][i]),
+                          tvl=float(pop["TVL"][i]))
+    return out
+
+
 def show(fig):
     st.pyplot(fig, width="stretch")
     plt.close(fig)
@@ -162,8 +199,8 @@ c[3].metric("Security h*", f"{summ['mean_h']:.2f}")
 c[4].metric("Utilization U", f"{summ['mean_U']:.1f}")
 c[5].metric("Pool return", f"{summ['final_r_pool']*100:.2f}%")
 
-tabs = st.tabs(["Dynamics", "Moral hazard", "Attacker", "Frontier",
-                "The game"])
+tabs = st.tabs(["Dynamics", "Hack ledger", "Moral hazard", "Attacker",
+                "Decision landscape (3-D)", "Frontier", "The game"])
 
 with tabs[0]:
     st.plotly_chart(app_charts.dynamics_chart(ep), width="stretch")
@@ -173,6 +210,47 @@ with tabs[0]:
         if summ["collateral_to_coverage"] else "")
 
 with tabs[1]:
+    if len(inc):
+        led = inc.sort_values("L", ascending=False)[
+            ["seed", "t", "V", "h", "e", "b_realized", "L", "cov",
+             "claim", "CC"]].reset_index(drop=True)
+        led.index += 1
+        a, b_, c_ = st.columns(3)
+        a.metric("Incidents", f"{len(led)}")
+        b_.metric("Total losses", f"${led.L.sum():,.0f}M")
+        c_.metric("Claims paid", f"${led.claim.sum():,.0f}M "
+                  f"({led.claim.sum() / max(led.L.sum(), 1e-9):.0%} of losses)")
+        st.dataframe(
+            led, width="stretch", height=430,
+            column_config={
+                "seed": st.column_config.NumberColumn("run"),
+                "t": st.column_config.NumberColumn("quarter"),
+                "V": st.column_config.NumberColumn("TVL", format="$%.1fM"),
+                "h": st.column_config.NumberColumn("security h",
+                                                   format="%.2f"),
+                "e": st.column_config.NumberColumn("effort (actions)",
+                                                   format="%.1f"),
+                "b_realized": st.column_config.NumberColumn(
+                    "blast radius", format="%.3f"),
+                "L": st.column_config.NumberColumn("loss", format="$%.1fM"),
+                "cov": st.column_config.NumberColumn("coverage",
+                                                     format="$%.1fM"),
+                "claim": st.column_config.NumberColumn("claim paid",
+                                                       format="$%.1fM"),
+                "CC": st.column_config.NumberColumn("collateral forfeited",
+                                                    format="$%.1fM"),
+            })
+        st.download_button("Download CSV",
+                           led.to_csv(index=False).encode(),
+                           "hack_ledger.csv", "text/csv")
+        st.caption("Every simulated incident across the Monte-Carlo runs, "
+                   "largest first. Blast radius = loss / TVL; collateral "
+                   "is forfeited to the pool when forfeiture is on.")
+    else:
+        st.info("No hacks realized under these parameters — raise seeds, "
+                "quarters, or the opportunity probability q.")
+
+with tabs[2]:
     st.markdown(
         "Same parameters, three regimes: the full mechanism, coverage "
         "**without** collateral forfeiture, and no insurance. With a "
@@ -191,7 +269,7 @@ with tabs[1]:
     st.plotly_chart(app_charts.moral_hazard_chart(regime_summ),
                     width="stretch")
 
-with tabs[2]:
+with tabs[3]:
     Pf, vstars = attacker_facts(cfg_key)
     a, b_, c_ = st.columns(3)
     a.metric("V*(h=0) — participation threshold", f"${vstars[0]:.1f}M")
@@ -202,8 +280,35 @@ with tabs[2]:
         "Becker target selection with c(e,V) = (F₀ + γc·e^κ)·V^η. Defense "
         "raises the participation threshold (extensive margin) and lowers "
         "extraction; value raises both effort and attack probability.")
+    st.subheader("The attacker-rent landscape (drag to rotate)")
+    st.plotly_chart(app_charts.attacker_rent_3d(Pf), width="stretch")
+    st.caption(
+        "π*(V, h): the attacker's expected rent per target. The flat sea "
+        "is the no-attack region; the coastline is the participation "
+        "frontier V*(h) — defense pushes the coastline right, value "
+        "raises the terrain. Whales are mountains: defense reduces what "
+        "is extracted, not whether they are worth attacking.")
 
-with tabs[3]:
+with tabs[4]:
+    st.markdown(
+        "**A protocol's decision problem** U(C_C, h) at the equilibrium "
+        "aggregates — the surface protocols climb when they best-respond. "
+        "Drag to rotate; the red diamond is the equilibrium choice. "
+        "Look for the **carry plateau** (utility rising in collateral up "
+        "to the wealth cap when the pool out-earns the market) and the "
+        "**security ridge** (Proposition C: forfeiture makes collateral "
+        "and security complements).")
+    lands = stage_landscapes(cfg_key)
+    pick = st.radio("Protocol size", list(lands.keys()), horizontal=True)
+    land = lands[pick]
+    st.plotly_chart(app_charts.protocol_utility_3d(land), width="stretch")
+    st.caption(
+        f"Selected protocol TVL: ${land['tvl']:,.0f}M; equilibrium "
+        f"C_C = ${land['cc_star']:,.1f}M, h = {land['h_star']:.2f}. "
+        "First-quarter equilibrium snapshot; toggle forfeiture or switch "
+        "to endogenous alpha in the sidebar and watch the surface reshape.")
+
+with tabs[5]:
     if len(inc) >= 40:
         fr = frontier_regression(inc, tau=0.10)
         fc = floor_check(inc, params_from(cfg))
@@ -224,7 +329,7 @@ with tabs[3]:
                 "needs ≥ 40. Raise the seeds, quarters, or the "
                 "opportunity probability q.")
 
-with tabs[4]:
+with tabs[6]:
     show(figures.fig_game_structure())
     st.markdown(
         "**One epoch (quarter):** protocols post collateral $C_C$ and pick "

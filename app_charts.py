@@ -183,3 +183,80 @@ def frontier_chart(inc, frontier, P):
     _style(fig, height=460)
     fig.update_layout(hovermode="closest")
     return fig
+
+
+def attacker_rent_3d(P):
+    """Rotatable attacker-rent landscape pi*(V, h): terrain above the
+    participation 'waterline' is the attack region (Prop. 1)."""
+    from attacker import attacker_best_response
+    V = np.logspace(0, 4, 90)
+    h = np.linspace(0, 4, 60)
+    Vm, Hm = np.meshgrid(V, h, indexing="ij")
+    br = attacker_best_response(Vm.ravel(), Hm.ravel(), P.attacker)
+    rent = np.maximum(br["pi_star"].reshape(Vm.shape), 0.0)
+    z = np.log10(1.0 + rent)
+    lx = np.log10(V)
+
+    vtxt = np.array([[f"V = ${v:,.0f}M" for v in V]] * h.size)
+    fig = go.Figure(go.Surface(
+        x=lx, y=h, z=z.T, colorscale="Blues", showscale=False,
+        customdata=rent.T, text=vtxt,
+        hovertemplate=("%{text}, h = %{y:.1f}<br>"
+                       "attacker rent pi* = $%{customdata:,.1f}M"
+                       "<extra></extra>"),
+        contours=dict(z=dict(show=True, usecolormap=True, width=1,
+                             project_z=False)),
+        lighting=dict(ambient=0.75, diffuse=0.6, specular=0.15),
+    ))
+    ticks = [0, 1, 10, 100, 1000]
+    fig.update_layout(
+        template="plotly_white", height=560,
+        font=dict(family="Inter, -apple-system, Segoe UI, sans-serif",
+                  size=12, color=INK),
+        margin=dict(l=0, r=0, t=30, b=0),
+        scene=dict(
+            xaxis=dict(title="value at stake", tickvals=[0, 1, 2, 3, 4],
+                       ticktext=["$1M", "$10M", "$100M", "$1B", "$10B"],
+                       gridcolor=GRID),
+            yaxis=dict(title="security h", gridcolor=GRID),
+            zaxis=dict(title="attacker rent (log)",
+                       tickvals=[np.log10(1 + t) for t in ticks],
+                       ticktext=[f"${t}M" for t in ticks],
+                       gridcolor=GRID),
+            camera=dict(eye=dict(x=-1.7, y=-1.5, z=0.8)),
+        ))
+    return fig
+
+
+def protocol_utility_3d(land):
+    """Rotatable protocol decision landscape U(C_C, h) with the
+    equilibrium choice marked. `land`: dict from the app's cached
+    stage snapshot (ccg, hg, U, cc_star, h_star, u_star, tvl)."""
+    ccg, hg, U = land["ccg"], land["hg"], land["U"]
+    fig = go.Figure()
+    fig.add_trace(go.Surface(
+        x=ccg, y=hg, z=U.T, colorscale="Blues", showscale=False,
+        opacity=0.97,
+        hovertemplate=("C_C = $%{x:,.1f}M, h = %{y:.1f}<br>"
+                       "utility = $%{z:,.3f}M/qtr<extra></extra>"),
+        contours=dict(z=dict(show=True, usecolormap=True, width=1)),
+        lighting=dict(ambient=0.75, diffuse=0.6, specular=0.15)))
+    fig.add_trace(go.Scatter3d(
+        x=[land["cc_star"]], y=[land["h_star"]], z=[land["u_star"]],
+        mode="markers+text", text=["equilibrium"],
+        textposition="top center", textfont=dict(size=12, color=RED),
+        marker=dict(size=6, color=RED, symbol="diamond"),
+        hovertemplate=("equilibrium: C_C = $%{x:,.1f}M, h = %{y:.1f}"
+                       "<extra></extra>"), showlegend=False))
+    fig.update_layout(
+        template="plotly_white", height=560,
+        font=dict(family="Inter, -apple-system, Segoe UI, sans-serif",
+                  size=12, color=INK),
+        margin=dict(l=0, r=0, t=30, b=0),
+        scene=dict(
+            xaxis=dict(title="collateral C_C ($M)", gridcolor=GRID),
+            yaxis=dict(title="security h", gridcolor=GRID),
+            zaxis=dict(title="utility ($M/quarter)", gridcolor=GRID),
+            camera=dict(eye=dict(x=1.8, y=-1.5, z=0.75)),
+        ))
+    return fig
