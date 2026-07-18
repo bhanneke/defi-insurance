@@ -59,14 +59,14 @@ def fig_dynamics(ep, path=None):
     ax = axes[1, 0]
     _band(ax, ep, "CLP", BLUE, "LP capital $C_{LP}$")
     _band(ax, ep, "sum_CC", ORANGE, "posted collateral $\\Sigma C_C$")
-    ax.set_title("Pool capital ($M)"); ax.set_xlabel("quarter")
+    ax.set_title("Pool capital (\\$M)"); ax.set_xlabel("quarter")
     ax.legend(frameon=False)
 
     ax = axes[1, 1]
     cum = ep.sort_values("t").groupby("seed").claims.cumsum()
     ep2 = ep.assign(cum_claims=cum)
-    _band(ax, ep2, "cum_claims", BLUE, "cumulative claims ($M)")
-    ax.set_title("Cumulative claims ($M)"); ax.set_xlabel("quarter")
+    _band(ax, ep2, "cum_claims", BLUE, "cumulative claims (\\$M)")
+    ax.set_title("Cumulative claims (\\$M)"); ax.set_xlabel("quarter")
     fig.suptitle("Endogenous-attacker dynamic game: baseline dynamics "
                  "(mean, 5–95% across seeds)", fontsize=10, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
@@ -78,7 +78,7 @@ def fig_moral_hazard(summaries, path=None):
     regimes = list(summaries.keys())
     metrics = [("mean_h", "Equilibrium security $h^*$"),
                ("hacks_per_year", "Hacks per year"),
-               ("raw_losses_per_year", "Raw hack losses ($M/yr)")]
+               ("raw_losses_per_year", "Raw hack losses (\\$M/yr)")]
     fig, axes = plt.subplots(1, 3, figsize=(8.6, 2.9))
     x = np.arange(len(regimes))
     for ax, (key, title) in zip(axes, metrics):
