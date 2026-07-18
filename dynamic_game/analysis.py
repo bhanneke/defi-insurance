@@ -4,11 +4,8 @@ import pandas as pd
 
 from params import AllParams
 from attacker import attack_cost
-from protocols import precompute_attacker_matrix, best_response, payoff_of
-from mechanism import coverage, utilization, U_max_dynamic, gamma_raw, \
-    gamma_blended, term_structure_from_hazard, p_risk_anchor, \
-    quarterly_pool_revenue
-from protocols import xi_of_h
+from protocols import best_response, utility_cc, eps_quadrature
+from mechanism import quarterly_pool_revenue
 
 
 def incidents_frame(runs):
@@ -68,10 +65,12 @@ def floor_check(inc: pd.DataFrame, P: AllParams):
                                        * inc.b_expected.values - floor)))
 
 
-def deviation_check(P: AllParams, run, rng, n_check: int = 25):
+def deviation_check(P: AllParams, run, rng, n_check: int = 25,
+                    n_dense: int = 4001):
     """Verify stage-Nash: no sampled unilateral (h, C_C) deviation improves
-    the final epoch's payoff. Rebuilds the final stage and compares the
-    equilibrium utility to the full grid maximum for sampled protocols.
+    the final epoch's payoff. Independent of the golden-section optimizer:
+    scans a DENSE linear C_C grid (n_dense points) at every h level and
+    compares against the equilibrium utility under fixed aggregates.
     """
     pop = run["pop"]
     CLP = run["final_CLP"]
@@ -84,30 +83,85 @@ def deviation_check(P: AllParams, run, rng, n_check: int = 25):
     aggregates = dict(gamma=eq["gamma"], gross_rev=base + fees,
                       sum_CC_others=sum_CC - br["CC"],
                       cap_scale=eq["cap_scale"])
-    # Equilibrium payoff vs. grid max under FIXED aggregates
     br2 = best_response(pop, atk, aggregates, P)
+    u_eq = br2["utility"]
+    eps_n, eps_w = eps_quadrature(P)
+
     idx = rng.choice(pop["TVL"].shape[0], size=n_check, replace=False)
-    u_eq = payoff_of(pop, atk, aggregates, P, br2["ih"], br2["CC"])
     gains = []
-    hg = atk["h_grid"]
     for i in idx:
-        best_dev = -np.inf
-        for ihh in range(hg.size):
-            ccs = np.linspace(0, P.proto.cc_tvl_cap * pop["TVL"][i], 40)
-            for cc in ccs:
-                u = payoff_of(
-                    {k: v[i:i + 1] for k, v in pop.items()},
-                    {k: (v[i:i + 1] if isinstance(v, np.ndarray) and v.ndim == 2
-                         else v) for k, v in atk.items()},
-                    dict(aggregates,
-                         sum_CC_others=aggregates["sum_CC_others"][i:i + 1]),
-                    P, np.array([ihh]), np.array([cc]))[0]
-                best_dev = max(best_dev, u)
-        gains.append(best_dev - u_eq[i])
+        cap = P.proto.cc_tvl_cap * pop["TVL"][i]
+        ccs = np.linspace(0.0, cap, n_dense) if P.mech.insurance_on \
+            else np.zeros(1)
+        # replicate protocol i across the dense CC grid: shape (n_dense, n_h)
+        pop_i = {k: np.repeat(v[i:i + 1], ccs.size) for k, v in pop.items()}
+        atk_i = {k: (np.repeat(v[i:i + 1, :], ccs.size, axis=0)
+                     if isinstance(v, np.ndarray) and v.ndim == 2 else v)
+                 for k, v in atk.items()}
+        agg_i = dict(aggregates,
+                     sum_CC_others=np.repeat(
+                         aggregates["sum_CC_others"][i:i + 1], ccs.size))
+        CC_mat = np.broadcast_to(ccs[:, None],
+                                 (ccs.size, atk["h_grid"].size)).copy()
+        u_dev = utility_cc(CC_mat, pop_i, atk_i, agg_i, P, eps_n, eps_w)
+        gains.append(float(u_dev.max()) - u_eq[i])
     gains = np.array(gains)
     return dict(max_gain=float(gains.max()),
                 mean_gain=float(gains.mean()),
                 rel_max_gain=float((gains / (np.abs(u_eq[idx]) + 1e-9)).max()))
+
+
+def full_game_deviation(P: AllParams, run, top_k: int = 8):
+    """Max unilateral gain when the deviator INTERNALIZES its effect on the
+    mechanism aggregates (gamma, gross_rev, cap_scale, hazard index).
+
+    The stage solver's certificate is for the aggregate-taking game; this
+    measures the distance of the computed profile from FULL-game Nash, for
+    the protocols with the largest collateral (largest price impact).
+    Candidate deviations: dense local grid around the accepted C_C plus a
+    coarse global grid, at every h level, with all aggregates recomputed
+    per candidate.
+    """
+    from game import solve_stage, _aggregates_of
+    pop, CLP = run["pop"], run["final_CLP"]
+    eq = solve_stage(pop, CLP, P)
+    br, atk = eq["br"], eq["atk"]
+    hg = atk["h_grid"]
+    n = pop["TVL"].shape[0]
+    eps_n, eps_w = eps_quadrature(P)
+
+    agg0, _ = _aggregates_of(br["CC"], br["h"], br["p_q"], CLP, pop, P)
+    CC_mat = np.repeat(br["CC"][:, None], hg.size, axis=1)
+    u0_all = utility_cc(CC_mat, pop, atk, agg0, P, eps_n, eps_w)
+    u0 = u0_all[np.arange(n), br["ih"]]
+
+    gains = {}
+    for i in np.argsort(-br["CC"])[:top_k]:
+        cap = P.proto.cc_tvl_cap * pop["TVL"][i]
+        local = br["CC"][i] + np.linspace(-5.0, 5.0, 101)
+        ccs = np.unique(np.clip(np.concatenate(
+            [local, np.linspace(0.0, cap, 41)]), 0.0, cap))
+        pop_i = {k: v[i:i + 1] for k, v in pop.items()}
+        best = -np.inf
+        for ih in range(hg.size):
+            atk_i = {k: (v[i:i + 1, ih:ih + 1]
+                         if isinstance(v, np.ndarray) and v.ndim == 2 else v)
+                     for k, v in atk.items()}
+            for c in ccs:
+                CCd = br["CC"].copy(); CCd[i] = c
+                hd = br["h"].copy(); hd[i] = hg[ih]
+                pqd = br["p_q"].copy(); pqd[i] = atk["p_q"][i, ih]
+                aggd, _ = _aggregates_of(CCd, hd, pqd, CLP, pop, P)
+                agg_i = dict(aggd,
+                             sum_CC_others=aggd["sum_CC_others"][i:i + 1])
+                atk_h = dict(atk_i, h_grid=hg[ih:ih + 1])
+                u = utility_cc(np.array([[c]]), pop_i, atk_h, agg_i, P,
+                               eps_n, eps_w)[0, 0]
+                best = max(best, u)
+        gains[int(i)] = float(best - u0[i])
+    arr = np.array(list(gains.values()))
+    return dict(max_gain=float(arr.max()), mean_gain=float(arr.mean()),
+                per_protocol=gains)
 
 
 def summarize(runs, P: AllParams):
@@ -119,7 +173,8 @@ def summarize(runs, P: AllParams):
         paid=("paid", "sum"), forfeited=("forfeited", "sum"),
         shortfall=("shortfall", "sum"), cov_mean=("coverage", "mean"),
         U=("U", "mean"), gamma=("gamma", "mean"), mean_h=("mean_h", "mean"),
-        insured=("insured_frac", "mean"))
+        insured=("insured_frac", "mean"), sum_CC=("sum_CC", "mean"),
+        CLP=("CLP", "mean"), r_pool=("r_pool_eff", "mean"))
     cov_dollar_years = per_run.cov_mean * n_years
     loss_rate_bps = 1e4 * per_run.claims / cov_dollar_years
     loss_rate = float(loss_rate_bps.mean())
@@ -137,6 +192,10 @@ def summarize(runs, P: AllParams):
         mean_U=float(per_run.U.mean()), mean_gamma=float(per_run.gamma.mean()),
         mean_h=float(per_run.mean_h.mean()),
         insured_frac=float(per_run.insured.mean()),
+        collateral_to_coverage=float((per_run.sum_CC / per_run.cov_mean).mean())
+            if per_run.cov_mean.gt(0).all() else None,
+        mean_C_total=float((per_run.sum_CC + per_run.CLP).mean()),
+        final_r_pool=float(ep[ep.t == ep.t.max()].r_pool_eff.mean()),
         shortfall_runs=float((per_run.shortfall > 0).mean()),
         pred_vs_realized_hacks=(float(ep.groupby("seed").exp_hacks.sum().mean()),
                                 float(per_run.hacks.mean())),

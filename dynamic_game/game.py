@@ -18,84 +18,186 @@ from params import AllParams
 from attacker import attacker_best_response
 from mechanism import (coverage, utilization, term_structure_from_hazard,
                        p_risk_anchor, U_max_dynamic, gamma_raw, gamma_blended,
-                       quarterly_pool_revenue, hazard_from_term_structure)
+                       quarterly_pool_revenue, pool_return)
 from protocols import (init_population, precompute_attacker_matrix,
-                       best_response, xi_of_h)
+                       best_response, xi_of_h, utility_cc, eps_quadrature)
+
+
+def _aggregates_of(CC, h, p_q, CLP, pop, P: AllParams):
+    """Self-consistent mechanism aggregates induced by a strategy profile.
+
+    Used both inside the fixed-point iteration and for the epsilon-Nash
+    certificate, so profile and aggregates always share one convention.
+    """
+    mp = P.mech
+    sum_CC = float(CC.sum())
+    lam_bar = float(np.mean(-np.log1p(-np.clip(p_q, 0.0, 0.999)) / 0.25))
+    P_ts = term_structure_from_hazard(lam_bar)
+    _, p_anchor, p_risk = p_risk_anchor(P_ts, mp)
+    cov_nom = coverage(CC, xi_of_h(h, P), mp, tvl=pop["TVL"])
+    U = utilization(float(cov_nom.sum()), CLP)
+    U_cap = U_max_dynamic(p_anchor, mp)
+    cap_scale = min(1.0, U_cap / max(U, 1e-9))
+    g_raw = gamma_raw(min(U, U_cap), p_risk, p_anchor, mp)
+    gamma, g_fair = gamma_blended(g_raw, CLP, sum_CC, mp)
+    C_total = CLP + sum_CC
+    base, fees = quarterly_pool_revenue(C_total, float(p_q.sum()), mp)
+    agg = dict(gamma=gamma, gross_rev=base + fees,
+               sum_CC_others=sum_CC - CC, cap_scale=cap_scale)
+    extras = dict(U=U, U_cap=U_cap, cap_scale=cap_scale, gamma=gamma,
+                  gamma_fair=g_fair, gamma_raw=g_raw, p_anchor=p_anchor,
+                  p_risk=p_risk, lam_bar=lam_bar, sum_CC=sum_CC,
+                  cov=cap_scale * cov_nom)
+    return agg, extras
+
+
+def _eps_of(br, agg, pop, atk, P: AllParams, eps_n, eps_w):
+    """Certified epsilon: per-protocol unilateral (h, C_C) utility gains
+    over the profile br when aggregates agg are held fixed (Nash criterion).
+    Returns (max gain, per-protocol gains, best-response profile)."""
+    n = pop["TVL"].shape[0]
+    br_star = best_response(pop, atk, agg, P)
+    CC_mat = np.repeat(br["CC"][:, None], atk["h_grid"].size, axis=1)
+    u_all = utility_cc(CC_mat, pop, atk, agg, P, eps_n, eps_w)
+    u_acc = u_all[np.arange(n), br["ih"]]
+    gains = br_star["utility"] - u_acc
+    return float(np.max(gains)), gains, br_star
+
+
+def _br_single(i, agg, pop, atk, P: AllParams):
+    """Best response of protocol i alone under fixed aggregates."""
+    pop_i = {k: v[i:i + 1] for k, v in pop.items()}
+    atk_i = {k: (v[i:i + 1] if isinstance(v, np.ndarray) and v.ndim == 2
+                 else v) for k, v in atk.items()}
+    agg_i = dict(agg, sum_CC_others=np.asarray(agg["sum_CC_others"])[i:i + 1])
+    return best_response(pop_i, atk_i, agg_i, P)
+
+
+def _sequential_refine(br, CLP, pop, atk, P: AllParams, eps_n, eps_w,
+                       max_passes: int = 40):
+    """Gauss-Seidel tail: sequentially re-optimize only the protocols with
+    positive certified gain, refreshing aggregates after each update. This
+    breaks the 2-cycles that simultaneous best response produces when a few
+    protocols are near-indifferent between adjacent h-grid points."""
+    gp = P.game
+    prof = {k: br[k].copy() for k in ("CC", "h", "ih", "p_q", "b_star",
+                                      "e_star", "pi_star", "xi", "utility")}
+    best_prof, best_eps = None, np.inf
+    for _ in range(max_passes):
+        agg, _ = _aggregates_of(prof["CC"], prof["h"], prof["p_q"], CLP, pop, P)
+        eps_k, gains, _ = _eps_of(prof, agg, pop, atk, P, eps_n, eps_w)
+        if eps_k < best_eps:
+            best_prof, best_eps = {k: v.copy() for k, v in prof.items()}, eps_k
+        if eps_k < gp.fp_eps_tol:
+            break
+        for i in np.argsort(-gains):
+            if gains[i] <= gp.fp_eps_tol:
+                break
+            agg, _ = _aggregates_of(prof["CC"], prof["h"], prof["p_q"],
+                                    CLP, pop, P)
+            bri = _br_single(int(i), agg, pop, atk, P)
+            for k in prof:
+                prof[k][i] = bri[k][0]
+    return best_prof, best_eps
 
 
 def solve_stage(pop, CLP, P: AllParams, state0=None):
-    """Within-quarter fixed point. Returns the stage equilibrium."""
+    """Within-quarter stage equilibrium.
+
+    Phase 1: damped fixed-point iteration for global stability.
+    Phase 2: undamped best-response polish on self-consistent aggregates,
+    keeping the profile with the smallest certified epsilon. The reported
+    `eps_stage` is the max unilateral utility gain at the accepted profile
+    — the equilibrium criterion itself. Exact pure-strategy equilibrium
+    need not exist in the finite-h game (Nash 1951 guarantees only the
+    mixed extension); the certificate quantifies the distance honestly.
+    """
     mp, gp = P.mech, P.game
     n = pop["TVL"].shape[0]
     atk = precompute_attacker_matrix(pop["TVL"], P)
+    eps_n, eps_w = eps_quadrature(P)
 
     # Initial iterate: previous epoch's strategy profile if available
     if state0 is not None:
         CC = state0["CC"].copy()
+        h = state0["h"].copy()
         p_q = state0["p_q"].copy()
     else:
         CC = 0.02 * pop["TVL"] if mp.insurance_on else np.zeros(n)
+        h = np.full(n, 0.0)
         p_q = np.full(n, 0.005)
 
-    gamma, cap_scale, g_fair = 0.5, 1.0, 0.5
-    info = dict(converged=False, iters=0)
+    info = dict(converged=False, iters=0, polish_iters=0)
+    br = None
 
+    # --- Phase 1: damped iteration ---
     for it in range(gp.fp_max_iter):
-        sum_CC = float(CC.sum())
-        sum_CC_others = sum_CC - CC
-
-        # Pricing layer: RE index from the current attack-probability iterate
-        lam_bar = float(np.mean(-np.log1p(-np.clip(p_q, 0.0, 0.999)) / 0.25))
-        P_ts = term_structure_from_hazard(lam_bar)
-        lam_fit, p_anchor, p_risk = p_risk_anchor(P_ts, mp)
-
-        # Mechanism aggregates
-        xi = xi_of_h(state0["h"], P) if (it == 0 and state0 is not None) else None
-        cov_now = coverage(CC, xi if xi is not None else P.proto.xi0, mp,
-                           tvl=pop["TVL"])
-        U = utilization(float(cov_now.sum()), CLP)
-        U_cap = U_max_dynamic(p_anchor, mp)
-        cap_scale = min(1.0, U_cap / max(U, 1e-9))
-        g_raw = gamma_raw(min(U, U_cap), p_risk, p_anchor, mp)
-        gamma, g_fair = gamma_blended(g_raw, CLP, sum_CC, mp)
-
-        C_total = CLP + sum_CC
-        exp_hacks = float(p_q.sum())
-        base, fees = quarterly_pool_revenue(C_total, exp_hacks, mp)
-        aggregates = dict(gamma=gamma, gross_rev=base + fees,
-                          sum_CC_others=sum_CC_others, cap_scale=cap_scale)
-
-        br = best_response(pop, atk, aggregates, P)
-
+        agg, _ = _aggregates_of(CC, h, p_q, CLP, pop, P)
+        br = best_response(pop, atk, agg, P)
         d = gp.fp_damping
         p_new = (1 - d) * p_q + d * br["p_q"]
+        CC_new = (1 - d) * CC + d * br["CC"]
         delta = max(float(np.max(np.abs(p_new - p_q))),
-                    float(np.max(np.abs(br["CC"] - CC))) / max(1.0, sum_CC))
-        CC, p_q = br["CC"], p_new
-        state0 = br  # carries h for the next iterate's xi
+                    float(np.max(np.abs(CC_new - CC))) / max(1.0, CC.sum()))
+        CC, p_q, h = CC_new, p_new, br["h"]
         info["iters"] = it + 1
         if delta < gp.fp_tol:
-            info["converged"] = True
             break
 
-    # Recompute consistent aggregates at the fixed point
-    br = state0
-    xi = xi_of_h(br["h"], P)
-    cov = cap_scale * coverage(br["CC"], xi, mp, tvl=pop["TVL"])
-    sum_CC = float(br["CC"].sum())
-    lam_bar = float(np.mean(br["lam_ann"])) if "lam_ann" in br else \
-        float(np.mean(-np.log1p(-np.clip(br["p_q"], 0.0, 0.999)) / 0.25))
-    P_ts = term_structure_from_hazard(lam_bar)
-    _, p_anchor, p_risk = p_risk_anchor(P_ts, mp)
-    U = utilization(float(cov.sum()), CLP)
-    U_cap = U_max_dynamic(p_anchor, mp)
-    g_raw = gamma_raw(min(U, U_cap), p_risk, p_anchor, mp)
-    gamma, g_fair = gamma_blended(g_raw, CLP, sum_CC, mp)
+    # --- Phase 2: undamped polish, keep the min-epsilon profile ---
+    best_br, best_eps = None, np.inf
+    for k in range(gp.polish_max_iter):
+        agg, _ = _aggregates_of(br["CC"], br["h"], br["p_q"], CLP, pop, P)
+        eps_k, _, br_star = _eps_of(br, agg, pop, atk, P, eps_n, eps_w)
+        if eps_k < best_eps:
+            best_br, best_eps = br, eps_k
+        info["polish_iters"] = k + 1
+        if eps_k < gp.fp_eps_tol:
+            break
+        br = br_star   # undamped best-response step
 
-    return dict(br=br, atk=atk, cov=cov, U=U, U_cap=U_cap, cap_scale=cap_scale,
-                gamma=gamma, gamma_fair=g_fair, gamma_raw=g_raw,
-                p_anchor=p_anchor, p_risk=p_risk, lam_bar=lam_bar,
-                sum_CC=sum_CC, info=info)
+    # --- Phase 3: sequential (Gauss-Seidel) refinement if cycling ---
+    if best_eps >= gp.fp_eps_tol:
+        seq_prof, seq_eps = _sequential_refine(best_br, CLP, pop, atk, P,
+                                               eps_n, eps_w)
+        if seq_eps < best_eps:
+            best_br, best_eps = seq_prof, seq_eps
+
+    # --- Phase 4: exhaustive enumeration over a small flip set ---
+    # If an exact pure equilibrium exists among the cycling candidates,
+    # this finds it; if not, the residual epsilon is fundamental (finite
+    # games need not admit exact pure-strategy Nash equilibria).
+    if best_eps >= gp.fp_eps_tol:
+        from itertools import product as _product
+        agg, _ = _aggregates_of(best_br["CC"], best_br["h"], best_br["p_q"],
+                                CLP, pop, P)
+        _, gains, br_star = _eps_of(best_br, agg, pop, atk, P, eps_n, eps_w)
+        flip = np.where(gains > gp.fp_eps_tol)[0]
+        keys = ("CC", "h", "ih", "p_q", "b_star", "e_star", "pi_star",
+                "xi", "utility")
+        if 0 < flip.size <= 5:
+            for combo in _product([0, 1], repeat=flip.size):
+                if not any(combo):
+                    continue
+                prof = {k: best_br[k].copy() for k in keys}
+                for b, i in zip(combo, flip):
+                    if b:
+                        for k in keys:
+                            prof[k][i] = br_star[k][i]
+                agg_c, _ = _aggregates_of(prof["CC"], prof["h"], prof["p_q"],
+                                          CLP, pop, P)
+                eps_c, _, _ = _eps_of(prof, agg_c, pop, atk, P, eps_n, eps_w)
+                if eps_c < best_eps:
+                    best_br, best_eps = prof, eps_c
+                if best_eps < gp.fp_eps_tol:
+                    break
+
+    br = best_br
+    info["eps_stage"] = best_eps
+    info["converged"] = best_eps < gp.fp_eps_tol
+
+    _, ex = _aggregates_of(br["CC"], br["h"], br["p_q"], CLP, pop, P)
+    return dict(br=br, atk=atk, info=info, **ex)
 
 
 def run_game(P: AllParams, seed: int):
@@ -159,12 +261,14 @@ def run_game(P: AllParams, seed: int):
             gamma=eq["gamma"], gamma_raw=eq["gamma_raw"],
             p_anchor=eq["p_anchor"], p_risk=eq["p_risk"], lam_bar=eq["lam_bar"],
             CLP=CLP, sum_CC=eq["sum_CC"], coverage=float(eq["cov"].sum()),
+            r_pool_eff=pool_return(C_total, mp),
             n_hacks=int(hit.sum()), claims=total_claims, paid=pay_total,
             forfeited=forfeited, shortfall=shortfall,
             mean_h=float(br["h"].mean()), mean_p=float(br["p_q"].mean()),
             exp_hacks=float(br["p_q"].sum()),
             insured_frac=float((br["CC"] > 0).mean()),
             fp_iters=eq["info"]["iters"], fp_conv=eq["info"]["converged"],
+            eps_stage=eq["info"].get("eps_stage", np.nan),
         ))
         for j, idx in enumerate(np.where(hit)[0]):
             incidents.append(dict(

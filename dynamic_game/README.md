@@ -77,6 +77,9 @@ sampled no-unilateral-deviation check runs at the end (`deviation_check`).
 | `calibrate.py` | Attacker-primitive calibration probe |
 | `smoke_test.py` | One-run diagnostic |
 | `run_experiments.py` | Full suite -> `outputs/results.json` + figures |
+| `PROOF_NOTES.md` | Equilibrium proofs for the endogenous-alpha extension |
+| `prove_equilibrium.py` | Computational certification (VERDICT output) |
+| `run_extension.py` | Endogenous-alpha experiments -> `results_extension.json` |
 
 Run: `python3 run_experiments.py` (stock python3 with numpy/pandas/scipy/
 statsmodels/matplotlib; ~45 s total).
@@ -109,12 +112,65 @@ statsmodels/matplotlib; ~45 s total).
 5. **Mechanism-design insight: protocols yield-farm the pool.** Under the full
    Eq. (7) objective with `r_pool > r_market` and a protocol yield share
    pro-rata in collateral, rational protocols post collateral far beyond the
-   coverage FOC (up to the wealth cap; collateral/coverage ~65% vs the paper's
+   coverage FOC (up to the wealth cap; collateral/coverage ~75% vs the paper's
    ~11%). Solvency and caps hold, but if the operator wants collateral to be a
    *penalty* margin rather than a carry trade, the protocol yield share should
    key on coverage, not collateral. This only appears when protocols optimize
    the full objective — the paper's simulation pins collateral via the
    coverage FOC alone.
+
+## Extension: endogenous pool alpha (carry-trade fix)
+
+Motivated by finding 5: make the pool's excess return scarce,
+`r_pool(C) = r_market + (r_pool0 - r_market) * K/(K + C)` with capacity K
+(`params.MechanismParams.pool_capacity`; None = fixed-alpha baseline).
+Equilibrium theory in `PROOF_NOTES.md`, certified by
+`prove_equilibrium.py`; experiments in `run_extension.py`
+(fig_pool_alpha.png, results_extension.json, 10 seeds per K):
+
+| | K=250 | K=1000 | K=4000 | fixed |
+|---|---|---|---|---|
+| pool capital C* ($M) | 2489 | 3258 | 4192 | 5058 |
+| collateral/coverage | 0.54 | 0.61 | 0.68 | 0.75 |
+| final r_pool | 5.4% | 6.0% | 7.2% | 10.0% |
+| equilibrium security h* | 0.86 | 0.99 | 1.10 | 1.15 |
+| hacks/yr | 3.15 | 2.80 | 2.45 | 2.10 |
+
+Three results:
+1. **The carry trade shrinks monotonically** as alpha capacity tightens
+   (C* falls by half; r_pool is arbitraged toward r_market as Prop. E2
+   predicts) — but residual collateral demand stays insurance-motivated,
+   so collateral/coverage does not collapse to the paper's 11% regime.
+2. **Deterrence side effect**: less carry means less posted collateral,
+   which weakens forfeiture skin-in-the-game — equilibrium security falls
+   (1.15 -> 0.86) and hacks rise 50% (2.10 -> 3.15/yr). The carry trade was
+   partly *funding* the deterrent: capital efficiency and security
+   incentives trade off.
+3. **The core moral-hazard result is robust**: under K=1000, removing
+   forfeiture still collapses security (0.99 -> 0.21) and quintuples hacks
+   (2.80 -> 10.10/yr).
+
+Equilibrium status (certified by `prove_equilibrium.py`, VERDICT output;
+independently red-teamed by an adversarial referee pass in the sense of
+Koren, arXiv:2606.22337 — see PROOF_NOTES.md "Provenance"):
+- Fact 1 PROVED (exact); Lemma 1 PROVED (EXACT symbolic proof — the
+  referee's numerator-coefficient route — plus independent search).
+- Solution concept: protocols are AGGREGATE-takers (gamma, pool revenue,
+  cap scaling taken as given, like price-taking). The computed paths are
+  certified per-epoch epsilon-equilibria of that game (21/24 test epochs
+  exact at eps < 1e-9 $M; max eps = $434/quarter). Exact pure equilibrium
+  at EVERY epoch is INCONCLUSIVE because it genuinely need not exist in
+  the finite-h game (mixed extension covered analytically).
+- Distance to FULL-game Nash (deviator internalizes its aggregate
+  impact) is MEASURED, not assumed: eps <= $964/quarter for the largest
+  collateral posters — economically negligible, but 8 orders above the
+  aggregate-taking certificate, which is why the concept is stated
+  explicitly (the referee refuted the original "Nash criterion" framing).
+- Prop. E2' (corrected): monotone comparative statics in K verified; the
+  E3' marginal-yield decomposition matches measurement within 1%; the
+  pre-registered "collateral/coverage halves" criterion is not met
+  (falls 28%, not 50%) — INCONCLUSIVE as specified, the residual demand
+  being insurance-motivated.
 
 ## Deliberate scope choices / extensions
 

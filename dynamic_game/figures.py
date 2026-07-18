@@ -132,6 +132,54 @@ def fig_eta_sweep(decile_profiles, loss_rates, path):
     fig.savefig(path, bbox_inches="tight"); plt.close(fig)
 
 
+def fig_pool_alpha(panels, path):
+    """Endogenous-alpha extension: sequential single-hue ramp over the
+    ordered capacity K (light = tight capacity, dark = fixed alpha)."""
+    ramp = {"250": "#9ec4f0", "1000": "#5f9fe8", "4000": "#2a78d6",
+            "inf": "#14477e"}
+    label = {"250": "K=250", "1000": "K=1000", "4000": "K=4000",
+             "inf": "fixed $r_{pool}$ (K=$\\infty$)"}
+    fig, axes = plt.subplots(2, 2, figsize=(8.6, 5.8))
+    specs = [("r_pool", "Pool return $r_{pool}(C)$ (annual)", axes[0, 0]),
+             ("cc_to_cov", "Collateral / coverage", axes[0, 1]),
+             ("mean_h", "Equilibrium security $h^*$", axes[1, 0])]
+    for key, title, ax in specs:
+        for k in ["250", "1000", "4000", "inf"]:
+            ax.plot(panels[k]["t"], panels[k][key], color=ramp[k], lw=2)
+        ax.set_title(title)
+        ax.set_xlabel("quarter")
+    axes[0, 0].axhline(0.05, color=MUTED, lw=1, ls="--")
+    axes[0, 0].annotate("$r_{market}$", xy=(1, 0.05), xytext=(0, 4),
+                        textcoords="offset points", fontsize=8, color=MUTED)
+    # shared legend via direct labels on the last line panel
+    for k in ["250", "1000", "4000", "inf"]:
+        axes[0, 1].annotate(label[k],
+                            xy=(panels[k]["t"][-1], panels[k]["cc_to_cov"][-1]),
+                            xytext=(4, 0), textcoords="offset points",
+                            color=ramp[k], fontsize=8, va="center")
+    axes[0, 1].set_xlim(right=panels["inf"]["t"][-1] + 2.6)
+
+    ax = axes[1, 1]
+    ks = ["250", "1000", "4000", "inf"]
+    x = np.arange(len(ks))
+    vals = [panels[k]["hacks_yr"] for k in ks]
+    ax.bar(x, vals, width=0.55, color=[ramp[k] for k in ks], zorder=3)
+    for xi, v in zip(x, vals):
+        ax.text(xi, v, f" {v:.2f}", ha="center", va="bottom", fontsize=8,
+                color=INK)
+    ax.set_xticks(x)
+    ax.set_xticklabels([label[k].replace(" (K=$\\infty$)", "") for k in ks],
+                       fontsize=8)
+    ax.set_title("Hacks per year")
+    ax.grid(axis="x", visible=False)
+    fig.suptitle("Endogenous pool alpha: the carry trade shrinks — and so "
+                 "does the forfeiture deterrent", fontsize=10,
+                 fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+
+
 def fig_frontier(inc, frontier, P, path):
     """Value-adjusted frontier: effort and value are correlated in
     equilibrium, so the display residualizes the estimated value slope

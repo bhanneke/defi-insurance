@@ -67,13 +67,31 @@ def gamma_blended(g_raw, CLP, sum_CC, mp: MechanismParams):
     return float(np.clip(g, 0.0, 1.0)), float(g_fair)
 
 
+def pool_return(C_total, mp: MechanismParams):
+    """Annual pool return; endogenous scarce alpha when pool_capacity is set.
+
+    r_pool(C) = r_market + (r_pool0 - r_market) * K / (K + C):
+    continuous, nonincreasing, -> r_market as C grows. Total revenue
+    R(C) = r_pool(C)*C is nondecreasing and concave with R(0)=0 (the
+    property the equilibrium existence lemma needs; see PROOF_NOTES.md).
+    """
+    if mp.pool_capacity is None:
+        return mp.r_pool
+    K = mp.pool_capacity
+    # Fact 1 (R increasing & concave) requires positive excess alpha and
+    # positive capacity; fail loudly on misconfiguration.
+    assert K > 0 and mp.r_pool > mp.r_market, \
+        "pool_capacity requires K > 0 and r_pool > r_market"
+    return mp.r_market + (mp.r_pool - mp.r_market) * K / (K + max(C_total, 0.0))
+
+
 def quarterly_pool_revenue(C_total, n_hack_events, mp: MechanismParams):
     """Base yield plus speculator fee inflows over one quarter.
 
     v6 convention: fee yields applied to total capital; the hack-day fee
     jump applies for one day per hack event.
     """
-    base = (mp.r_pool / 4.0) * C_total
+    base = (pool_return(C_total, mp) / 4.0) * C_total
     fees = (mp.fee_base_annual / 4.0) * C_total \
         + (mp.fee_hack_jump / 365.0) * C_total * n_hack_events
     return base, fees

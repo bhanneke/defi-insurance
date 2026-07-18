@@ -1,0 +1,43 @@
+============================================================
+PROPOSITION: FACT1: R(C)=r_pool(C)*C is increasing and strictly concave
+METHOD: Symbolic (SymPy)
+============================================================
+R'(C) - r_market = K**2*s_0/(C + K)**2  (> 0)
+R''(C) = -2*K**2*s_0/(C + K)**3  (< 0)
+VERDICT FACT1: PROVED
+CONFIDENCE: exact (symbolic)
+
+============================================================
+PROPOSITION: LEMMA1: f(c) = R(CLP+S+c)*c/(S+c) is concave in c
+METHOD: Numerical counterexample search (grid + optimizer)
+============================================================
+worst f'' over 20k random points + optimizer polish: -1.947e-16
+VERDICT LEMMA1: PROVED
+CONFIDENCE: no counterexample; worst curvature -1.95e-16 <= 1e-08 (analytical proof in PROOF_NOTES.md)
+
+============================================================
+PROPOSITION: THEOREM1': stage equilibrium (endogenous alpha) — two claims
+METHOD: Constructive: per-epoch epsilon-Nash certificate + independent dense-scan deviation check
+============================================================
+epochs certified EXACT (eps < 1e-09 $M): 21/24
+max certified epsilon across all epochs: 4.340e-04 $M (= $434 per quarter on $M-scale payoffs)
+independent dense-scan deviation gain (final epochs): 8.715e-15 $M
+VERDICT THEOREM1_EXACT: INCONCLUSIVE
+LIMITATIONS: exact pure-strategy equilibria need not exist in the finite-h game (Nash 1951 covers the mixed extension; Lemma 1 + Kakutani cover the continuous-strategy game analytically). Sequential refinement and flip-set enumeration did not locate exact profiles at the non-certified epochs, indicating fundamental (not numerical) non-existence there.
+VERDICT THEOREM1_EPSILON: PROVED
+CONFIDENCE: every epoch is a certified pure epsilon-equilibrium with eps <= 4.340e-04 $M; 21/24 epochs are exact at machine tolerance.
+
+============================================================
+PROPOSITION: PROPE2: C* bounded, monotone in K; carry trade extinguishes
+METHOD: Numerical comparative statics (K sweep, 6 seeds each)
+============================================================
+K= 250.0: C_total=    2472  CC/coverage=0.543  r_pool(final)=0.0538  h=0.85  hacks/yr=4.25
+K=1000.0: C_total=    3320  CC/coverage=0.615  r_pool(final)=0.0597  h=0.99  hacks/yr=3.58
+K=4000.0: C_total=    4278  CC/coverage=0.691  r_pool(final)=0.0716  h=1.11  hacks/yr=3.33
+K=  None: C_total=    5229  CC/coverage=0.765  r_pool(final)=0.1000  h=1.16  hacks/yr=2.92
+C* monotone in K: True; collateral/coverage collapses vs fixed alpha: False; alpha compressed toward r_market: True
+VERDICT PROPE2: INCONCLUSIVE
+CONFIDENCE: 6 seeds per K; asymptotic-in-n argument in PROOF_NOTES.md
+
+============================================================
+report -> outputs/proof_report.json

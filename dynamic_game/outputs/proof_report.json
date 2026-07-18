@@ -1,0 +1,60 @@
+{
+  "FACT1": {
+    "verdict": "PROVED",
+    "R1": "K**2*s_0/(C + K)**2 + r_m",
+    "R2": "-2*K**2*s_0/(C + K)**3"
+  },
+  "LEMMA1": {
+    "verdict": "PROVED",
+    "symbolic_all_coeffs_nonpositive": true,
+    "n_monomials": 38,
+    "worst_second_derivative": -3.719687959554642e-20
+  },
+  "THEOREM1": {
+    "verdict_agg_exact": "INCONCLUSIVE",
+    "verdict_agg_epsilon": "PROVED",
+    "verdict_fullgame_epsilon": "PROVED",
+    "n_epochs": 24,
+    "n_exact": 21,
+    "max_eps": 0.00043401457016012043,
+    "median_eps": 2.2933454614515458e-11,
+    "max_deviation_dense_scan": 8.715250743307479e-15,
+    "max_fullgame_gain": 0.0009643172191413085
+  },
+  "PROPE2": {
+    "verdict": "INCONCLUSIVE",
+    "sweep": {
+      "250.0": {
+        "C_total": 2472.254126147744,
+        "cc_to_cov": 0.5434383140051805,
+        "r_pool_final": 0.05379560800617845,
+        "hacks_per_year": 4.25,
+        "mean_h": 0.8474305555555555
+      },
+      "1000.0": {
+        "C_total": 3320.183794077469,
+        "cc_to_cov": 0.6154907720639221,
+        "r_pool_final": 0.05968696562676548,
+        "hacks_per_year": 3.5833333333333335,
+        "mean_h": 0.9924027777777776
+      },
+      "4000.0": {
+        "C_total": 4277.620550605135,
+        "cc_to_cov": 0.6914580998078557,
+        "r_pool_final": 0.07162554135841105,
+        "hacks_per_year": 3.3333333333333335,
+        "mean_h": 1.1050277777777777
+      },
+      "None": {
+        "C_total": 5229.450370964819,
+        "cc_to_cov": 0.7649711580493644,
+        "r_pool_final": 0.09999999999999999,
+        "hacks_per_year": 2.9166666666666665,
+        "mean_h": 1.1595694444444442
+      }
+    },
+    "monotone": true,
+    "extinct": false,
+    "alpha_compressed": true
+  }
+}

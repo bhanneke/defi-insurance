@@ -72,7 +72,12 @@ class MechanismParams:
     U_max_hi: float = 30.0
     kappa_U: float = 100.0    # dynamic-cap sensitivity (dynamic cap ON)
     r_market: float = 0.05    # annual
-    r_pool: float = 0.10      # annual
+    r_pool: float = 0.10      # annual (fixed alpha, used when pool_capacity None)
+    pool_capacity: float = None  # K ($M): endogenous scarce alpha
+                              # r_pool(C) = r_market + (r_pool0 - r_market)*K/(K+C).
+                              # None = paper baseline (fixed r_pool). Finite K makes
+                              # excess pool return decay toward r_market as capital
+                              # crowds in, extinguishing the collateral carry trade.
     rho_LP: float = 0.005     # annual LP risk premium
     kappa_LP: float = 2.0     # LP capital adjustment speed, Prop. 2(ii)
     fee_base_annual: float = 0.03
@@ -113,9 +118,16 @@ class GameParams:
     n_quarters: int = 8       # 2 years, matching the paper's horizon
     CLP0: float = 250.0       # initial LP capital ($M)
     tvl_growth: float = 0.10  # annual TVL drift
-    fp_max_iter: int = 40     # within-epoch fixed-point iterations
+    fp_max_iter: int = 100    # within-epoch fixed-point iterations
     fp_tol: float = 1e-4      # sup-norm tolerance on (p, gamma)
     fp_damping: float = 0.5   # damping on the price iterate
+    fp_eps_tol: float = 1e-9  # epsilon-Nash certificate ($M): an epoch counts
+                              # as converged iff the max unilateral utility
+                              # gain at the accepted profile (under its own
+                              # aggregates) is below this — the actual
+                              # equilibrium criterion.
+    polish_max_iter: int = 40 # undamped best-response polish steps used to
+                              # minimize the certified epsilon
     CLP_floor: float = 10.0
     seed: int = 1234
 
