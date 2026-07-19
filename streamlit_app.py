@@ -239,7 +239,7 @@ with tabs[1]:
                 "e": st.column_config.NumberColumn("effort (actions)",
                                                    format="%.1f"),
                 "b_realized": st.column_config.NumberColumn(
-                    "blast radius", format="%.3f"),
+                    "blast radius (% of TVL)", format="percent"),
                 "L": st.column_config.NumberColumn("loss", format="$%.1fM"),
                 "cov": st.column_config.NumberColumn("coverage",
                                                      format="$%.1fM"),
