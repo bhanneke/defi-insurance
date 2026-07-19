@@ -33,6 +33,14 @@ from protocols import init_population, utility_cc, eps_quadrature
 import figures
 import app_charts
 
+# Self-heal Streamlit's hot-reload path: on a fast redeploy the main
+# script is re-read but imported modules stay cached from the previous
+# process; reload them if they predate the current code.
+if not hasattr(app_charts, "attacker_rent_3d"):
+    import importlib
+    app_charts = importlib.reload(app_charts)
+    figures = importlib.reload(figures)
+
 st.set_page_config(page_title="DeFi Insurance Dynamic Game",
                    page_icon="🛡️", layout="wide")
 
