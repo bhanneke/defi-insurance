@@ -1,0 +1,28 @@
+% Theorem environments (amsthm)
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+% Operators
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\Cov}{Cov}
+
+% Model shorthands (keep in one place so notation stays consistent)
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\Pr}
+\newcommand{\ind}[1]{\mathbf{1}\{#1\}}   % bbm fonts unavailable in tectonic
+\newcommand{\Rpos}{\mathbb{R}_+}
+\newcommand{\cov}{q}                       % coverage of protocol i: q_i
+\newcommand{\poolret}{r^{\mathrm{pool}}}   % pool return schedule
+\newcommand{\rmkt}{r^{\mathrm{m}}}         % market rate
+\newcommand{\blast}{\beta}                 % extraction (blast-radius) tech
+\newcommand{\rent}{\pi}                    % attacker rent
