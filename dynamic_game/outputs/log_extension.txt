@@ -1,7 +1,0 @@
-[ 127.5s] K=250: C_total=2489 CC/cov=0.537 r_pool_fin=0.0537 h=0.86 hacks/yr=3.15 eps_max=3.92e-04
-[ 218.6s] K=1000: C_total=3258 CC/cov=0.605 r_pool_fin=0.0598 h=0.99 hacks/yr=2.80 eps_max=9.32e-04
-[ 259.0s] K=4000: C_total=4192 CC/cov=0.681 r_pool_fin=0.0719 h=1.10 hacks/yr=2.45 eps_max=1.40e-03
-[ 282.3s] K=inf: C_total=5058 CC/cov=0.748 r_pool_fin=0.1000 h=1.15 hacks/yr=2.10 eps_max=2.65e-03
-[ 282.3s] moral-hazard robustness under K=1000 (forfeiture off)...
-[ 350.2s]   no_forfeiture@K1000: h=0.213, hacks/yr=10.10 (with forfeiture: h=0.987, 2.80)
-[ 350.4s] done -> outputs/results_extension.json
