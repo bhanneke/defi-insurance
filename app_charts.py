@@ -286,3 +286,42 @@ def protocol_utility_3d(land):
             camera=dict(eye=dict(x=1.8, y=-1.5, z=0.75)),
         ))
     return fig
+
+
+def design_heatmap(df, best, current):
+    """Design-optimizer grid: delivered risk transfer over (mu, theta),
+    infeasible cells blank with an x marker; star = optimum, open circle
+    = the operator's current sidebar setting."""
+    mus = sorted(df["mu"].unique())
+    ths = sorted(df["theta"].unique())
+    z = np.full((len(ths), len(mus)), np.nan)
+    txt = [["" for _ in mus] for _ in ths]
+    for _, r in df.iterrows():
+        i, j = ths.index(r["theta"]), mus.index(r["mu"])
+        if r["feasible"]:
+            z[i, j] = r["paid_yr"]
+            txt[i][j] = f"{r['paid_yr']:.1f}"
+        else:
+            txt[i][j] = "✗"
+    fig = go.Figure(go.Heatmap(
+        x=mus, y=ths, z=z, colorscale="Blues",
+        text=txt, texttemplate="%{text}", textfont=dict(size=11),
+        colorbar=dict(title=dict(text="claims paid<br>($M/yr)"),
+                      thickness=12, len=0.8),
+        hovertemplate="μ=%{x}, θ=%{y}<br>claims paid: %{z:.1f} $M/yr"
+                      "<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        x=[best["mu"]], y=[best["theta"]], mode="markers",
+        showlegend=False,
+        marker=dict(symbol="star", size=17, color=ORANGE,
+                    line=dict(color=INK, width=1)),
+        hovertemplate="optimum μ*, θ*<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        x=[current[0]], y=[current[1]], mode="markers", showlegend=False,
+        marker=dict(symbol="circle-open", size=16,
+                    line=dict(color=RED, width=2.5)),
+        hovertemplate="current sidebar setting<extra></extra>"))
+    fig.update_xaxes(title_text="μ — coverage scale", tickvals=mus)
+    fig.update_yaxes(title_text="θ — coverage concavity", tickvals=ths)
+    _style(fig, height=380)
+    return fig
