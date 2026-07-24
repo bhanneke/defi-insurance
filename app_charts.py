@@ -56,9 +56,26 @@ def _band(fig, ep, col, color, name, row, col_i, unit=""):
                   row=row, col=col_i)
     fig.add_trace(go.Scatter(
         x=x, y=m, mode="lines", name=name,
-        line=dict(color=color, width=2.5),
+        line=dict(color=color, width=2.5), showlegend=False,
         hovertemplate=f"{name}: %{{y:.2f}}{unit}<extra></extra>"),
         row=row, col=col_i)
+    return float(m[-1])
+
+
+def _pair_labels(fig, ep, specs, row, col_i):
+    """Direct labels inside a panel instead of a shared legend: annotate
+    each series at its final mean value, nudged apart vertically so the
+    two labels never collide. specs: [(df_col, color, text), ...]."""
+    finals = [(ep.groupby("t")[c].mean(), color, text)
+              for c, color, text in specs]
+    order = sorted(range(len(finals)),
+                   key=lambda i: -finals[i][0].iloc[-1])
+    for rank, i in enumerate(order):
+        g, color, text = finals[i]
+        fig.add_annotation(
+            x=g.index[-1] + 1, y=g.iloc[-1], text=text, showarrow=False,
+            font=dict(size=11.5, color=color), xanchor="right",
+            yshift=14 if rank == 0 else -15, row=row, col=col_i)
 
 
 def dynamics_chart(ep):
@@ -66,6 +83,7 @@ def dynamics_chart(ep):
         rows=2, cols=2, vertical_spacing=0.16, horizontal_spacing=0.09,
         subplot_titles=("Utilization vs. dynamic cap", "LP yield share γ",
                         "Pool capital ($M)", "Cumulative claims ($M)"))
+    fig.update_annotations(font_size=13)   # titles only; labels come later
     _band(fig, ep, "U", BLUE, "utilization U", 1, 1)
     _band(fig, ep, "U_cap", ORANGE, "prudential cap", 1, 1)
     _band(fig, ep, "gamma", BLUE, "applied γ (blended)", 1, 2)
@@ -75,12 +93,20 @@ def dynamics_chart(ep):
     ep2 = ep.assign(cum_claims=ep.sort_values("t")
                     .groupby("seed").claims.cumsum())
     _band(fig, ep2, "cum_claims", BLUE, "cumulative claims", 2, 2, unit="M")
+    _pair_labels(fig, ep, [("U", BLUE, "utilization U"),
+                           ("U_cap", ORANGE, "prudential cap")], 1, 1)
+    _pair_labels(fig, ep, [("gamma", BLUE, "applied γ (blended)"),
+                           ("gamma_raw", ORANGE, "raw γ (Eq. 8)")], 1, 2)
+    _pair_labels(fig, ep, [("CLP", BLUE, "LP capital"),
+                           ("sum_CC", ORANGE, "posted collateral")], 2, 1)
+    _pair_labels(fig, ep2, [("cum_claims", BLUE, "cumulative claims")],
+                 2, 2)
     fig.update_yaxes(range=[0, 1], row=1, col=2)
     for r, c in [(1, 1), (1, 2), (2, 1), (2, 2)]:
         fig.update_xaxes(title_text="quarter", row=r, col=c,
                          title_standoff=4)
     _style(fig, height=560)
-    fig.update_annotations(font_size=13)
+    fig.update_layout(showlegend=False)
     return fig
 
 
@@ -259,4 +285,43 @@ def protocol_utility_3d(land):
             zaxis=dict(title="utility ($M/quarter)", gridcolor=GRID),
             camera=dict(eye=dict(x=1.8, y=-1.5, z=0.75)),
         ))
+    return fig
+
+
+def design_heatmap(df, best, current):
+    """Design-optimizer grid: delivered risk transfer over (mu, theta),
+    infeasible cells blank with an x marker; star = optimum, open circle
+    = the operator's current sidebar setting."""
+    mus = sorted(df["mu"].unique())
+    ths = sorted(df["theta"].unique())
+    z = np.full((len(ths), len(mus)), np.nan)
+    txt = [["" for _ in mus] for _ in ths]
+    for _, r in df.iterrows():
+        i, j = ths.index(r["theta"]), mus.index(r["mu"])
+        if r["feasible"]:
+            z[i, j] = r["paid_yr"]
+            txt[i][j] = f"{r['paid_yr']:.1f}"
+        else:
+            txt[i][j] = "✗"
+    fig = go.Figure(go.Heatmap(
+        x=mus, y=ths, z=z, colorscale="Blues",
+        text=txt, texttemplate="%{text}", textfont=dict(size=11),
+        colorbar=dict(title=dict(text="claims paid<br>($M/yr)"),
+                      thickness=12, len=0.8),
+        hovertemplate="μ=%{x}, θ=%{y}<br>claims paid: %{z:.1f} $M/yr"
+                      "<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        x=[best["mu"]], y=[best["theta"]], mode="markers",
+        showlegend=False,
+        marker=dict(symbol="star", size=17, color=ORANGE,
+                    line=dict(color=INK, width=1)),
+        hovertemplate="optimum μ*, θ*<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        x=[current[0]], y=[current[1]], mode="markers", showlegend=False,
+        marker=dict(symbol="circle-open", size=16,
+                    line=dict(color=RED, width=2.5)),
+        hovertemplate="current sidebar setting<extra></extra>"))
+    fig.update_xaxes(title_text="μ — coverage scale", tickvals=mus)
+    fig.update_yaxes(title_text="θ — coverage concavity", tickvals=ths)
+    _style(fig, height=380)
     return fig

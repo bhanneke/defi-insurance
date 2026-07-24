@@ -1,6 +1,6 @@
 """Interactive demonstrator for the DeFi insurance dynamic game.
 
-Wraps the ACTUAL research engine in `dynamic_game/` (no port, no drift):
+Wraps the ACTUAL research engine in `pipeline/dynamic_game/` (no port, no drift):
 a strategic Becker attacker with the FIRM structural cost curve
 c(e,V) = (F0 + gamma_c e^kappa) V^eta faces the MARBLE2026 insurance
 mechanism; protocols choose collateral AND security anticipating the
@@ -11,13 +11,14 @@ Run locally:   streamlit run streamlit_app.py
 Deploy:        Streamlit Community Cloud -> this repo -> streamlit_app.py
 
 This app is the DEMONSTRATOR. Canonical, certified results live in
-dynamic_game/ (run_experiments.py, prove_equilibrium.py, PROOF_NOTES.md).
+pipeline/dynamic_game/ (run_experiments.py, prove_equilibrium.py,
+PROOF_NOTES.md).
 """
 import os
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "dynamic_game"))
+sys.path.insert(0, os.path.join(_HERE, "pipeline", "dynamic_game"))
 sys.path.insert(0, _HERE)
 
 import matplotlib.pyplot as plt
@@ -36,7 +37,7 @@ import app_charts
 # Self-heal Streamlit's hot-reload path: on a fast redeploy the main
 # script is re-read but imported modules stay cached from the previous
 # process; reload them if they predate the current code.
-if not hasattr(app_charts, "attacker_rent_3d"):
+if not hasattr(app_charts, "design_heatmap"):
     import importlib
     app_charts = importlib.reload(app_charts)
     figures = importlib.reload(figures)
@@ -51,29 +52,44 @@ st.caption(
     "choose collateral **and** security anticipating the attacker; HACK "
     "prices are rational-expectations; LP capital self-adjusts. "
     "Exploratory demonstrator — certified results and proofs are in the "
-    "repository (`dynamic_game/`).")
+    "repository (`pipeline/dynamic_game/`).")
 
 
 # ----------------------------- sidebar -----------------------------------
+# Attacker-technology parameters are HISTORICAL estimates (structural
+# calibration on realized DeFi exploit data, companion paper) — they
+# describe the attacker's environment, not design choices. They live under
+# an Advanced expander with a reset-to-historical button.
+HIST_ATTACKER = dict(w_eta=0.20, w_kappa=2.7, w_F_bar=25.0, w_q_opp=0.04)
+for _k, _v in HIST_ATTACKER.items():
+    st.session_state.setdefault(_k, _v)
+
+
+def _reset_attacker():
+    for _k, _v in HIST_ATTACKER.items():
+        st.session_state[_k] = _v
+
+
 with st.sidebar:
     st.header("Parameters")
     with st.form("params"):
-        st.subheader("Attacker (FIRM estimates)")
-        eta = st.slider("η — value-elasticity of attack cost",
-                        0.0, 0.5, 0.20, 0.01,
-                        help="Structural estimate: 0.20–0.29 (frontier ~0.20)")
-        kappa = st.slider("κ — effort-elasticity of attack cost",
-                          1.5, 4.0, 2.7, 0.1)
-        F_bar = st.slider("F̄ — attacker outside option ($M)",
-                          5.0, 100.0, 25.0, 5.0)
-        q_opp = st.slider("q — quarterly opportunity probability",
-                          0.01, 0.20, 0.04, 0.01)
-
-        st.subheader("Mechanism")
+        st.subheader("Mechanism design (operator's choices)")
         insurance_on = st.toggle("Insurance market on", value=True)
-        forfeiture = st.toggle("Collateral forfeiture on hack", value=True)
-        mu = st.slider("μ — coverage scale", 1.0, 6.0, 3.0, 0.5)
-        theta = st.slider("θ — coverage concavity", 0.2, 0.9, 0.5, 0.05)
+        forfeiture = st.toggle(
+            "Collateral forfeiture on hack", value=True,
+            help="The deterrence instrument: a hacked protocol's posted "
+                 "collateral is transferred to the pool. Switch off to "
+                 "see attacker-amplified moral hazard.")
+        mu = st.slider(
+            "μ — coverage scale", 1.0, 6.0, 3.0, 0.5,
+            help="Coverage = μ·C^θ. Scales how much coverage a dollar of "
+                 "collateral buys. See the 'Design optimizer' tab before "
+                 "hand-tuning.")
+        theta = st.slider(
+            "θ — coverage concavity", 0.2, 0.9, 0.5, 0.05,
+            help="Concavity of coverage in collateral. Low θ caps whale "
+                 "coverage harder (capital-efficient, answers η<1 "
+                 "whale-targeting); θ→1 approaches proportional coverage.")
 
         st.subheader("Pool economics")
         r_market_pct = st.slider("r_market (% p.a.)", 1.0, 10.0, 5.0, 0.5)
@@ -88,11 +104,60 @@ with st.sidebar:
 
         st.subheader("Simulation")
         n_protocols = st.slider("Protocols", 100, 500, 300, 50)
-        n_quarters = st.slider("Quarters", 4, 16, 8, 2)
-        n_seeds = st.slider("Monte-Carlo seeds", 1, 15, 5)
+        n_quarters = st.slider(
+            "Quarters", 4, 40, 8, 2,
+            help="Simulation horizon. Longer horizons produce more "
+                 "incidents (the Frontier tab needs them) but TVL growth "
+                 "compounds, so late quarters are larger economies.")
+        n_seeds = st.slider(
+            "Monte-Carlo seeds", 1, 30, 5,
+            help="Independent simulated histories; incidents pool across "
+                 "seeds. The cheapest way to give the Frontier tab enough "
+                 "hacks: seeds ≥ 15 with quarters ≥ 16 yields ≈ 100+ "
+                 "incidents at historical q.")
+
+        with st.expander("Advanced: attacker technology (historical)"):
+            st.caption(
+                "Estimated from **historical DeFi exploit data** "
+                "(structural calibration; companion paper). These describe "
+                "the attacker's technology and environment — not the "
+                "operator's choices. Vary them for what-if analysis; "
+                "**Reset attacker** restores the historical estimates.")
+            eta = st.slider(
+                "η — value-elasticity of attack cost",
+                0.0, 0.5, step=0.01, key="w_eta",
+                help="Attack cost ∝ V^η. η=1 would mean doubling a "
+                     "protocol's TVL doubles the cost of hacking it (the "
+                     "consensus-security benchmark); the historical "
+                     "estimate η≈0.20 means cost barely grows with size — "
+                     "whales are attractive targets, which is why coverage "
+                     "is concave.")
+            kappa = st.slider(
+                "κ — effort-elasticity of attack cost",
+                1.5, 4.0, step=0.1, key="w_kappa",
+                help="Attack cost ∝ e^κ within a target: κ≈2.7 "
+                     "(historical) means sharply rising marginal cost of "
+                     "pushing an exploit deeper — attackers stop at "
+                     "partial extraction.")
+            F_bar = st.slider(
+                "F̄ — attacker outside option ($M)",
+                5.0, 100.0, step=5.0, key="w_F_bar",
+                help="Participation scale: an opportunity with rent π* is "
+                     "executed with probability 1 − exp(−π*/F̄). Low F̄ = "
+                     "hungry attackers execute small rents; high F̄ = only "
+                     "big scores get taken. Calibrated to historical "
+                     "hack frequency.")
+            q_opp = st.slider(
+                "q — quarterly opportunity probability",
+                0.01, 0.20, step=0.01, key="w_q_opp",
+                help="Chance per protocol-quarter that an exploitable "
+                     "window opens (a vulnerability exists and is found). "
+                     "Calibrated to the historical incident rate.")
 
         submitted = st.form_submit_button("Run simulation", type="primary",
                                           width="stretch")
+        st.form_submit_button("Reset attacker to historical values",
+                              on_click=_reset_attacker, width="stretch")
 
 
 def build_cfg():
@@ -137,6 +202,23 @@ def run_scenario(cfg_key: tuple):
     runs = [run_game(P, seed=1000 + s) for s in range(cfg["n_seeds"])]
     summ, ep, inc = summarize(runs, P)
     return summ, ep, inc
+
+
+@st.cache_data(show_spinner=False, max_entries=96)
+def design_point(cfg_key: tuple, n_seeds_opt: int = 3):
+    """One (mu, theta) candidate for the design optimizer: small-seed run,
+    returns the operator-relevant metrics."""
+    cfg = dict(cfg_key)
+    P = params_from(cfg)
+    runs = [run_game(P, seed=1000 + s) for s in range(n_seeds_opt)]
+    summ, ep, _ = summarize(runs, P)
+    yrs = cfg["n_quarters"] / 4.0 * n_seeds_opt
+    return dict(
+        mu=cfg["mu"], theta=cfg["theta"],
+        paid_yr=float(ep["paid"].sum()) / yrs,
+        shortfall_yr=float(ep["shortfall"].sum()) / yrs,
+        hacks_yr=summ["hacks_per_year"], mean_h=summ["mean_h"],
+        final_CLP=float(ep.loc[ep["t"] == ep["t"].max(), "CLP"].mean()))
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -208,7 +290,8 @@ c[4].metric("Utilization U", f"{summ['mean_U']:.1f}")
 c[5].metric("Pool return", f"{summ['final_r_pool']*100:.2f}%")
 
 tabs = st.tabs(["Dynamics", "Hack ledger", "Moral hazard", "Attacker",
-                "Decision landscape (3-D)", "Frontier", "The game"])
+                "Decision landscape (3-D)", "Frontier", "The game",
+                "Design optimizer"])
 
 with tabs[0]:
     st.plotly_chart(app_charts.dynamics_chart(ep), width="stretch")
@@ -333,9 +416,13 @@ with tabs[5]:
             "simulated equilibrium incidents. The downward bias in η̂ "
             "mirrors the empirical paper's lower-bound property.")
     else:
-        st.info(f"Only {len(inc)} incidents — the frontier regression "
-                "needs ≥ 40. Raise the seeds, quarters, or the "
-                "opportunity probability q.")
+        st.info(
+            f"Only {len(inc)} incidents — the frontier regression needs "
+            "≥ 40 to be estimable (≈ 100+ for stable estimates). Incidents "
+            "pool across Monte-Carlo seeds, so the cheapest fix is more "
+            "seeds: try **seeds ≥ 15 with quarters ≥ 16** in the sidebar "
+            "(protocols ↑ helps too). Raising q adds hacks but departs "
+            "from the historical calibration.")
 
 with tabs[6]:
     show(figures.fig_game_structure())
@@ -356,8 +443,87 @@ with tabs[6]:
         "attacker-economics participation frontier re-emerges in "
         "equilibrium and is estimable from simulated incidents.")
 
+with tabs[7]:
+    st.subheader("Design optimizer: coverage scale μ and concavity θ")
+    st.markdown(
+        "Instead of hand-tuning μ and θ, grid-search them holding every "
+        "other sidebar setting fixed. **Operator objective (transparent, "
+        "illustrative):** maximize *delivered risk transfer* — claims "
+        "paid ($M/yr) — subject to **no pool shortfall** and **final LP "
+        "capital ≥ 50% of initial** (solvency). The table shows every "
+        "candidate so the security/coverage trade-off stays visible.")
+    MU_GRID = [1.5, 2.0, 3.0, 4.0, 5.0]
+    TH_GRID = [0.30, 0.45, 0.60, 0.75]
+    _base = {k: v for k, v in cfg.items()
+             if k not in ("mu", "theta", "n_seeds")}
+    _base_key = tuple(sorted(_base.items()))
+    if not cfg["insurance_on"]:
+        st.info("Turn the insurance market on to optimize the design.")
+    else:
+        stale = st.session_state.get("design_cfg") != _base_key
+        if st.button(
+                f"Run grid ({len(MU_GRID) * len(TH_GRID)} designs × 3 "
+                "seeds — a few minutes on first run)", type="primary") \
+                or not stale:
+            if stale:
+                grid = [(m_, t_) for m_ in MU_GRID for t_ in TH_GRID]
+                prog = st.progress(0.0, text="running candidate designs…")
+                rows = []
+                for gi, (m_, t_) in enumerate(grid):
+                    c = dict(_base, mu=m_, theta=t_,
+                             n_quarters=min(cfg["n_quarters"], 12))
+                    rows.append(design_point(tuple(sorted(c.items()))))
+                    prog.progress((gi + 1) / len(grid),
+                                  text=f"μ={m_:.1f}, θ={t_:.2f}")
+                prog.empty()
+                st.session_state.design_df = pd.DataFrame(rows)
+                st.session_state.design_cfg = _base_key
+            ddf = st.session_state.design_df.copy()
+            ddf["feasible"] = ((ddf.shortfall_yr < 1e-6)
+                               & (ddf.final_CLP >= 0.5 * cfg["CLP0"]))
+            feas = ddf[ddf.feasible]
+            if len(feas):
+                best = feas.sort_values("paid_yr", ascending=False).iloc[0]
+                a, b_, c_, d_ = st.columns(4)
+                a.metric("optimal μ*", f"{best.mu:.1f}")
+                b_.metric("optimal θ*", f"{best.theta:.2f}")
+                c_.metric("risk transfer", f"${best.paid_yr:,.1f}M/yr")
+                d_.metric("hacks / year", f"{best.hacks_yr:.2f}")
+                st.plotly_chart(
+                    app_charts.design_heatmap(ddf, best,
+                                              (cfg["mu"], cfg["theta"])),
+                    width="stretch")
+                st.caption(
+                    "Blue cells: delivered risk transfer ($M/yr); ✗ = "
+                    "infeasible (pool shortfall or LP capital eroded). "
+                    "Star = optimum, circle = your current sidebar "
+                    "setting. Grid runs at ≤ 12 quarters for speed.")
+            else:
+                st.warning("No candidate satisfies the solvency "
+                           "constraints under these settings — raise LP "
+                           "capital or r_pool.")
+            st.dataframe(
+                ddf.sort_values(["feasible", "paid_yr"],
+                                ascending=[False, False]),
+                width="stretch", hide_index=True,
+                column_config={
+                    "mu": st.column_config.NumberColumn("μ"),
+                    "theta": st.column_config.NumberColumn("θ"),
+                    "paid_yr": st.column_config.NumberColumn(
+                        "claims paid ($M/yr)", format="%.1f"),
+                    "shortfall_yr": st.column_config.NumberColumn(
+                        "shortfall ($M/yr)", format="%.2f"),
+                    "hacks_yr": st.column_config.NumberColumn(
+                        "hacks/yr", format="%.2f"),
+                    "mean_h": st.column_config.NumberColumn(
+                        "security h*", format="%.2f"),
+                    "final_CLP": st.column_config.NumberColumn(
+                        "final LP capital ($M)", format="%.0f"),
+                    "feasible": st.column_config.CheckboxColumn("feasible"),
+                })
+
 st.divider()
 st.caption(
     "Demonstrator only — indicative, small-sample runs. Canonical "
     "experiments, equilibrium certification (ε-Nash per epoch) and proofs: "
-    "`dynamic_game/` in this repository.")
+    "`pipeline/dynamic_game/` in this repository.")
